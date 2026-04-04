@@ -43,10 +43,15 @@ function KpiCard({ data }: { data: KpiData }) {
   );
 }
 
-export default function HudKpi() {
+interface HudKpiProps {
+  data?: KpiData[];
+}
+
+export default function HudKpi({ data }: HudKpiProps = {}) {
+  const items = data ?? KPI_DATA;
   return (
     <div className="flex items-center gap-2 overflow-x-auto">
-      {KPI_DATA.map(d => (
+      {items.map(d => (
         <KpiCard key={d.label} data={d} />
       ))}
     </div>

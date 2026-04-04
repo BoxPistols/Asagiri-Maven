@@ -1,12 +1,20 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Wifi, Cpu, Clock, Sun, Moon } from "lucide-react";
+import { Wifi, Cpu, Clock, Sun, Moon, Swords, Shield } from "lucide-react";
 import { useTheme } from "@/hooks/useTheme";
+import type { GamePhase } from "@/lib/game-types";
 
-export default function StatusHeader() {
+interface StatusHeaderProps {
+  gameWave?: number;
+  gameTurn?: number;
+  gamePhase?: GamePhase;
+}
+
+export default function StatusHeader({ gameWave, gameTurn, gamePhase }: StatusHeaderProps = {}) {
   const [time, setTime] = useState("");
   const { theme, toggle } = useTheme();
+  const isGameMode = !!gamePhase;
 
   useEffect(() => {
     const tick = () => {
@@ -27,14 +35,36 @@ export default function StatusHeader() {
           </div>
           <div>
             <span className="readout text-base text-accent-cyan font-bold tracking-[0.25em]">MAVEN</span>
-            <span className="text-xs text-text-dim ml-2 tracking-wide">Smart System</span>
+            <span className="text-xs text-text-dim ml-2 tracking-wide">
+              {isGameMode ? "COMMAND" : "Smart System"}
+            </span>
           </div>
         </div>
         <div className="h-5 w-px bg-border-subtle" />
-        <div className="flex items-center gap-2 text-xs readout text-alert-success">
-          <div className="w-2 h-2 rounded-full bg-alert-success animate-pulse-dot" />
-          全システム稼働中
-        </div>
+        {isGameMode ? (
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-1.5 readout text-xs text-accent-cyan">
+              <Swords className="w-3.5 h-3.5" />
+              <span className="font-bold">WAVE {gameWave}/5</span>
+            </div>
+            <div className="h-4 w-px bg-border-subtle" />
+            <div className="flex items-center gap-1.5 readout text-xs text-text-secondary">
+              <Shield className="w-3.5 h-3.5 text-accent-indigo" />
+              <span>TURN <span className="text-text-primary font-bold">{gameTurn}</span></span>
+            </div>
+            {gamePhase === "paused" && (
+              <>
+                <div className="h-4 w-px bg-border-subtle" />
+                <span className="readout text-xs text-alert-warning animate-blink">PAUSED</span>
+              </>
+            )}
+          </div>
+        ) : (
+          <div className="flex items-center gap-2 text-xs readout text-alert-success">
+            <div className="w-2 h-2 rounded-full bg-alert-success animate-pulse-dot" />
+            全システム稼働中
+          </div>
+        )}
       </div>
 
       <div className="flex items-center gap-5">

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { ALERT_ITEMS, type AlertItem, type SeverityLevel } from "@/lib/mock-data";
-import { AlertTriangle, AlertCircle, Info, ChevronDown, Zap, MapPin, ArrowRight } from "lucide-react";
+import { AlertTriangle, AlertCircle, Info, ChevronDown, Zap, MapPin, ArrowRight, Send } from "lucide-react";
 
 function sevConfig(s: SeverityLevel) {
   switch (s) {
@@ -18,11 +18,12 @@ function scoreColor(score: number) {
   return "var(--accent-cyan)";
 }
 
-function AlertCard({ alert, isExpanded, onToggle, onSelectMarker }: {
+function AlertCard({ alert, isExpanded, onToggle, onSelectMarker, onDispatch }: {
   alert: AlertItem;
   isExpanded: boolean;
   onToggle: () => void;
   onSelectMarker?: (id: string) => void;
+  onDispatch?: (eventId: string) => void;
 }) {
   const cfg = sevConfig(alert.severity);
   const Icon = cfg.icon;
@@ -64,6 +65,14 @@ function AlertCard({ alert, isExpanded, onToggle, onSelectMarker }: {
             <button className="btn-approve flex-1 justify-center">
               <ArrowRight className="w-3.5 h-3.5" /> 承認・実行
             </button>
+            {onDispatch && (
+              <button
+                className="btn-tactical flex-1 justify-center !border-accent-indigo/40 !text-accent-indigo hover:!bg-accent-indigo/10"
+                onClick={e => { e.stopPropagation(); onDispatch(alert.id); }}
+              >
+                <Send className="w-3.5 h-3.5" /> 派遣
+              </button>
+            )}
             {alert.markerId && (
               <button
                 className="btn-tactical"
@@ -79,16 +88,23 @@ function AlertCard({ alert, isExpanded, onToggle, onSelectMarker }: {
   );
 }
 
-export default function AiTriage({ onSelectMarker }: { onSelectMarker?: (id: string) => void }) {
+interface AiTriageProps {
+  onSelectMarker?: (id: string) => void;
+  alerts?: AlertItem[];
+  onDispatch?: (eventId: string) => void;
+}
+
+export default function AiTriage({ onSelectMarker, alerts, onDispatch }: AiTriageProps) {
   const [expandedId, setExpandedId] = useState<string | null>("alt-1");
-  const sorted = [...ALERT_ITEMS].sort((a, b) => b.score - a.score);
+  const data = alerts ?? ALERT_ITEMS;
+  const sorted = [...data].sort((a, b) => b.score - a.score);
 
   return (
     <div className="panel flex flex-col h-full">
       <div className="panel-header">
         AI検知
         <span className="ml-auto readout text-xs text-text-secondary">
-          {ALERT_ITEMS.length} 件
+          {data.length} 件
         </span>
       </div>
       <div className="flex-1 overflow-y-auto">
@@ -99,6 +115,7 @@ export default function AiTriage({ onSelectMarker }: { onSelectMarker?: (id: str
             isExpanded={expandedId === alert.id}
             onToggle={() => setExpandedId(prev => prev === alert.id ? null : alert.id)}
             onSelectMarker={onSelectMarker}
+            onDispatch={onDispatch}
           />
         ))}
       </div>

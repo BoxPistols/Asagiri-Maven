@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { WORKFLOW_CARDS, type WorkflowCard } from "@/lib/mock-data";
 import { CheckCircle, Clock, Eye, Zap, ArrowRight } from "lucide-react";
 
@@ -17,10 +17,21 @@ function sevDot(s: string) {
   return "bg-accent-cyan";
 }
 
-export default function WorkflowKanban() {
-  const [cards, setCards] = useState(WORKFLOW_CARDS);
+interface WorkflowKanbanProps {
+  cards?: WorkflowCard[];
+  onAdvance?: (id: string) => void;
+}
+
+export default function WorkflowKanban({ cards: propCards, onAdvance }: WorkflowKanbanProps = {}) {
+  const [cards, setCards] = useState(propCards ?? WORKFLOW_CARDS);
+
+  // Sync from props when game engine pushes new cards
+  useEffect(() => {
+    if (propCards) setCards(propCards);
+  }, [propCards]);
 
   const advanceCard = (id: string) => {
+    if (onAdvance) { onAdvance(id); return; }
     setCards(prev => prev.map(c => {
       if (c.id !== id) return c;
       const next = c.stage === "detected" ? "reviewing" : c.stage === "reviewing" ? "approved" : c.stage === "approved" ? "executed" : c.stage;

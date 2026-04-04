@@ -2,7 +2,8 @@
 
 import { useState, useEffect, useMemo } from "react";
 import { MAP_MARKERS, VEHICLE_ROUTES, type MapMarker, type SeverityLevel } from "@/lib/mock-data";
-import { Layers, Crosshair, Clock, Warehouse, Truck, AlertTriangle, User, Navigation } from "lucide-react";
+import { Layers, Crosshair, Clock, Warehouse, Truck, AlertTriangle, User, Navigation, Swords } from "lucide-react";
+import type { GameUnit } from "@/lib/game-types";
 import { useTheme } from "@/hooks/useTheme";
 import dynamic from "next/dynamic";
 
@@ -114,7 +115,15 @@ const LAYER_CONFIG: { key: LayerType; label: string; icon: typeof Warehouse }[] 
 const TILE_DARK = "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png";
 const TILE_LIGHT = "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png";
 
-export default function TacticalMap({ onSelectMarker }: { onSelectMarker?: (id: string | null) => void }) {
+interface TacticalMapProps {
+  onSelectMarker?: (id: string | null) => void;
+  markers?: MapMarker[];
+  enemyUnits?: GameUnit[];
+  playerUnits?: GameUnit[];
+  children?: React.ReactNode;
+}
+
+export default function TacticalMap({ onSelectMarker, markers, enemyUnits, playerUnits, children }: TacticalMapProps) {
   const { theme } = useTheme();
   const [mounted, setMounted] = useState(false);
   const [timeValue, setTimeValue] = useState(100);
@@ -125,10 +134,57 @@ export default function TacticalMap({ onSelectMarker }: { onSelectMarker?: (id: 
 
   useEffect(() => { setMounted(true); }, []);
 
+  const baseMarkers = markers ?? MAP_MARKERS;
+
   const filteredMarkers = useMemo(
-    () => MAP_MARKERS.filter(m => layers[m.type]),
-    [layers]
+    () => baseMarkers.filter(m => layers[m.type]),
+    [baseMarkers, layers]
   );
+
+  // Build engagement lines: player unit engaging enemy unit
+  const engagementLines = useMemo(() => {
+    if (!playerUnits || !enemyUnits) return [];
+    const lines: { from: [number, number]; to: [number, number]; id: string }[] = [];
+    for (const pu of playerUnits) {
+      if (pu.status === "engaging" && pu.targetId) {
+        const target = enemyUnits.find(e => e.id === pu.targetId);
+        if (target) {
+          lines.push({
+            id: `engage-${pu.id}-${target.id}`,
+            from: [pu.lat, pu.lng],
+            to: [target.lat, target.lng],
+          });
+        }
+      }
+    }
+    return lines;
+  }, [playerUnits, enemyUnits]);
+
+  // Create divIcon for enemy units
+  const createEnemyIcon = (unit: GameUnit) => {
+    if (typeof window === "undefined") return undefined;
+    const L = require("leaflet");
+    const isEngaging = unit.status === "engaging";
+    const isDamaged = unit.status === "damaged";
+    const typeChar = "E";
+    const color = "#f87171";
+    const pulseClass = isEngaging || isDamaged ? "enemy-pulse-anim" : "";
+
+    return L.divIcon({
+      className: "custom-marker",
+      html: `
+        <div style="position:relative;display:flex;align-items:center;justify-content:center;" class="${pulseClass}">
+          <span style="position:absolute;width:36px;height:36px;border-radius:50%;background:${color};opacity:0.15;animation:enemy-pulse 1.8s ease-out infinite;"></span>
+          <span style="position:relative;display:flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:50%;background:rgba(248,113,113,0.2);border:2px solid ${color};font-family:var(--font-mono);font-size:11px;font-weight:bold;color:${color};">
+            ${typeChar}
+          </span>
+        </div>
+      `,
+      iconSize: [36, 36],
+      iconAnchor: [18, 18],
+      popupAnchor: [0, -18],
+    });
+  };
 
   const toggleLayer = (key: LayerType) => {
     setLayers(prev => ({ ...prev, [key]: !prev[key] }));
@@ -255,6 +311,70 @@ export default function TacticalMap({ onSelectMarker }: { onSelectMarker?: (id: 
                     }}
                   />
                 ))}
+
+              {/* Enemy unit markers */}
+              {enemyUnits?.filter(u => u.status !== "destroyed").map(unit => (
+                <Marker
+                  key={`enemy-${unit.id}`}
+                  position={[unit.lat, unit.lng] as [number, number]}
+                  icon={createEnemyIcon(unit)}
+                >
+                  <Popup>
+                    <div className="min-w-[200px] p-0 text-text-primary" style={{ fontFamily: "var(--font-display)" }}>
+                      <div className="flex items-center gap-2 mb-2">
+                        <span className="readout text-xs uppercase px-1.5 py-0.5 rounded font-bold"
+                          style={{ color: "#f87171", backgroundColor: "rgba(248,113,113,0.15)", border: "1px solid rgba(248,113,113,0.4)" }}>
+                          敵
+                        </span>
+                        <span className="readout text-xs uppercase px-1.5 py-0.5 rounded"
+                          style={{ color: "#f87171", backgroundColor: "rgba(248,113,113,0.1)" }}>
+                          {unit.status}
+                        </span>
+                      </div>
+                      <div className="text-sm font-semibold mb-1" style={{ color: "var(--text-primary)" }}>{unit.name}</div>
+                      <div className="text-xs mb-1" style={{ color: "var(--text-secondary)" }}>{unit.detail}</div>
+                      <div className="flex items-center gap-3 text-xs readout" style={{ color: "var(--text-dim)" }}>
+                        <span>HP {unit.hp}/{unit.maxHp}</span>
+                        <span>ATK {unit.attack}</span>
+                        <span>DEF {unit.defense}</span>
+                      </div>
+                      <div className="text-xs mt-1.5 pt-1.5 readout" style={{ color: "var(--text-dim)", borderTop: "1px solid var(--border-subtle)" }}>
+                        {unit.lat.toFixed(4)}, {unit.lng.toFixed(4)}
+                      </div>
+                    </div>
+                  </Popup>
+                </Marker>
+              ))}
+
+              {/* Enemy pulse circles */}
+              {enemyUnits?.filter(u => u.status !== "destroyed").map(unit => (
+                <CircleMarker
+                  key={`ering-${unit.id}`}
+                  center={[unit.lat, unit.lng] as [number, number]}
+                  radius={22}
+                  pathOptions={{
+                    color: "#f87171",
+                    weight: 1,
+                    opacity: 0.12,
+                    fillOpacity: 0.04,
+                    fillColor: "#f87171",
+                  }}
+                />
+              ))}
+
+              {/* Engagement lines (player -> enemy) */}
+              {engagementLines.map(line => (
+                <Polyline
+                  key={line.id}
+                  positions={[line.from, line.to]}
+                  pathOptions={{
+                    color: "#f87171",
+                    weight: 2,
+                    opacity: 0.6,
+                    dashArray: "6 4",
+                  }}
+                />
+              ))}
             </MapContainer>
           </>
         )}
@@ -309,8 +429,8 @@ export default function TacticalMap({ onSelectMarker }: { onSelectMarker?: (id: 
         {/* Marker count badges */}
         <div className="absolute bottom-2 left-2 z-[1000] flex items-center gap-2">
           {LAYER_CONFIG.map(cfg => {
-            const count = MAP_MARKERS.filter(m => m.type === cfg.key).length;
-            const critCount = MAP_MARKERS.filter(m => m.type === cfg.key && m.status === "critical").length;
+            const count = baseMarkers.filter(m => m.type === cfg.key).length;
+            const critCount = baseMarkers.filter(m => m.type === cfg.key && m.status === "critical").length;
             const Icon = cfg.icon;
             return (
               <div
@@ -327,7 +447,17 @@ export default function TacticalMap({ onSelectMarker }: { onSelectMarker?: (id: 
               </div>
             );
           })}
+          {/* Enemy count badge (game mode) */}
+          {enemyUnits && enemyUnits.length > 0 && (
+            <div className="flex items-center gap-1 readout text-xs px-2 py-1 rounded bg-bg-deep/80 border border-alert-critical/30 text-alert-critical">
+              <Swords className="w-3 h-3" />
+              <span>{enemyUnits.filter(u => u.status !== "destroyed").length}</span>
+            </div>
+          )}
         </div>
+
+        {/* Slot for child overlays (e.g. GameControls) */}
+        {children}
       </div>
 
       {/* Timeline slider */}

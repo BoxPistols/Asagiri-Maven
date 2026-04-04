@@ -50,11 +50,21 @@ const AI_RESPONSES: Record<string, string> = {
   "品番A-2240の発注を承認して": "品番A-2240 緊急補充発注を処理します:\n\n📋 発注内容:\n• 品番: A-2240（220個）\n• サプライヤー: B社（最短24h納品）\n• 推定コスト: ¥1,540,000\n• 納品先: 東京中央倉庫\n\n✅ 発注承認を受け付けました。ERPシステムへ送信中...\n→ ワークフロー「品番A-2240 緊急補充発注」を「承認済」に更新しました。",
 };
 
-export default function ChatInterface() {
-  const [messages, setMessages] = useState<ChatMessage[]>(CHAT_HISTORY);
+interface ChatInterfaceProps {
+  messages?: ChatMessage[];
+  onSend?: (text: string) => void;
+}
+
+export default function ChatInterface({ messages: propMessages, onSend }: ChatInterfaceProps = {}) {
+  const [messages, setMessages] = useState<ChatMessage[]>(propMessages ?? CHAT_HISTORY);
   const [input, setInput] = useState("");
   const [isTyping, setIsTyping] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  // Sync from props when game engine pushes new log entries
+  useEffect(() => {
+    if (propMessages) setMessages(propMessages);
+  }, [propMessages]);
 
   useEffect(() => {
     if (scrollRef.current) {

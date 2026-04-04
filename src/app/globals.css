@@ -302,3 +302,87 @@ body::after {
 }
 .btn-approve:hover { background: var(--btn-approve-hover); }
 .btn-approve:active { transform: scale(0.97); }
+
+/* ========== Game Overlay ========== */
+.game-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(7, 11, 21, 0.85);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+[data-theme="light"] .game-overlay {
+  background: rgba(248, 250, 252, 0.88);
+}
+
+.game-card {
+  width: 100%;
+  max-width: 480px;
+  margin: 0 16px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-active);
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow:
+    0 0 40px rgba(34, 211, 238, 0.08),
+    0 20px 60px rgba(0, 0, 0, 0.3);
+}
+[data-theme="light"] .game-card {
+  box-shadow:
+    0 4px 24px rgba(0, 0, 0, 0.08),
+    0 1px 4px rgba(0, 0, 0, 0.04);
+}
+
+/* Combat flash effect */
+@keyframes combat-flash {
+  0% { opacity: 0; }
+  10% { opacity: 0.4; }
+  100% { opacity: 0; }
+}
+.animate-combat-flash {
+  animation: combat-flash 0.6s ease-out;
+  pointer-events: none;
+  position: fixed;
+  inset: 0;
+  z-index: 9998;
+  background: radial-gradient(ellipse at center, rgba(248, 113, 113, 0.3), transparent 70%);
+}
+
+/* Enemy marker pulse (red) */
+@keyframes enemy-pulse {
+  0% { opacity: 0.4; transform: scale(1); }
+  100% { opacity: 0; transform: scale(2.2); }
+}
+.enemy-pulse-anim > span:first-child {
+  animation: enemy-pulse 1.8s ease-out infinite !important;
+}
+
+/* Game controls bar */
+.game-controls {
+  position: absolute;
+  bottom: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1000;
+  min-width: 420px;
+  max-width: 600px;
+  background: var(--bg-surface);
+  opacity: 0.95;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--border-active);
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow:
+    0 0 20px rgba(34, 211, 238, 0.06),
+    0 8px 32px rgba(0, 0, 0, 0.2);
+}
+[data-theme="light"] .game-controls {
+  box-shadow:
+    0 2px 12px rgba(0, 0, 0, 0.08),
+    0 1px 3px rgba(0, 0, 0, 0.04);
+}
