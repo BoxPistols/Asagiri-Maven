@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo } from "react";
 import { MAP_MARKERS, VEHICLE_ROUTES, type MapMarker, type SeverityLevel } from "@/lib/mock-data";
-import { Layers, Crosshair, Clock, Warehouse, Truck, AlertTriangle, User } from "lucide-react";
+import { Layers, Crosshair, Clock, Warehouse, Truck, AlertTriangle, User, Navigation } from "lucide-react";
 import dynamic from "next/dynamic";
 
 // Lazy load map to avoid SSR issues with Leaflet
@@ -46,6 +46,7 @@ function typeIcon(type: MapMarker["type"]) {
     case "vehicle": return Truck;
     case "alert": return AlertTriangle;
     case "personnel": return User;
+    case "drone": return Navigation;
   }
 }
 
@@ -76,23 +77,23 @@ function MarkerPopupContent({ marker }: { marker: MapMarker }) {
   const color = statusColor(marker.status);
   return (
     <div className="min-w-[200px] p-0 text-text-primary" style={{ fontFamily: "var(--font-display)" }}>
-      <div className="flex items-center gap-2 mb-1.5">
+      <div className="flex items-center gap-2 mb-2">
         <span
-          className="readout text-[9px] uppercase px-1.5 py-0.5 rounded font-bold"
+          className="readout text-xs uppercase px-1.5 py-0.5 rounded font-bold"
           style={{ color, backgroundColor: `${color}15`, border: `1px solid ${color}40` }}
         >
-          {marker.type === "facility" ? "施設" : marker.type === "vehicle" ? "車両" : marker.type === "alert" ? "検知" : "人員"}
+          {marker.type === "facility" ? "施設" : marker.type === "vehicle" ? "車両" : marker.type === "alert" ? "検知" : marker.type === "drone" ? "ドローン" : "人員"}
         </span>
         <span
-          className="readout text-[9px] uppercase px-1.5 py-0.5 rounded"
+          className="readout text-xs uppercase px-1.5 py-0.5 rounded"
           style={{ color, backgroundColor: `${color}10` }}
         >
           {marker.status}
         </span>
       </div>
-      <div className="text-sm font-semibold mb-1" style={{ color: "#e8ecf4" }}>{marker.label}</div>
-      <div className="text-xs" style={{ color: "#8892a8" }}>{marker.detail}</div>
-      <div className="text-[10px] mt-1.5 pt-1.5 readout" style={{ color: "#4a5568", borderTop: "1px solid #1e293b" }}>
+      <div className="text-sm font-semibold mb-1" style={{ color: "#f1f5f9" }}>{marker.label}</div>
+      <div className="text-xs" style={{ color: "#94a3b8" }}>{marker.detail}</div>
+      <div className="text-xs mt-1.5 pt-1.5 readout" style={{ color: "#64748b", borderTop: "1px solid #1e293b" }}>
         {marker.lat.toFixed(4)}, {marker.lng.toFixed(4)}
       </div>
     </div>
@@ -100,10 +101,11 @@ function MarkerPopupContent({ marker }: { marker: MapMarker }) {
 }
 
 // Layer toggle types
-type LayerType = "facility" | "vehicle" | "alert" | "personnel";
+type LayerType = "facility" | "vehicle" | "alert" | "personnel" | "drone";
 const LAYER_CONFIG: { key: LayerType; label: string; icon: typeof Warehouse }[] = [
   { key: "facility", label: "施設", icon: Warehouse },
   { key: "vehicle", label: "車両", icon: Truck },
+  { key: "drone", label: "ドローン", icon: Navigation },
   { key: "alert", label: "検知", icon: AlertTriangle },
   { key: "personnel", label: "人員", icon: User },
 ];
@@ -112,7 +114,7 @@ export default function TacticalMap({ onSelectMarker }: { onSelectMarker?: (id: 
   const [mounted, setMounted] = useState(false);
   const [timeValue, setTimeValue] = useState(100);
   const [layers, setLayers] = useState<Record<LayerType, boolean>>({
-    facility: true, vehicle: true, alert: true, personnel: true,
+    facility: true, vehicle: true, drone: true, alert: true, personnel: true,
   });
   const [showLayerPanel, setShowLayerPanel] = useState(false);
 
@@ -133,14 +135,14 @@ export default function TacticalMap({ onSelectMarker }: { onSelectMarker?: (id: 
     const L = require("leaflet");
     const color = statusColor(marker.status);
     const isAlert = marker.status === "critical" || marker.status === "warning";
-    const typeChar = marker.type === "facility" ? "F" : marker.type === "vehicle" ? "V" : marker.type === "alert" ? "!" : "P";
+    const typeChar = marker.type === "facility" ? "F" : marker.type === "vehicle" ? "V" : marker.type === "drone" ? "D" : marker.type === "alert" ? "!" : "P";
 
     return L.divIcon({
       className: "custom-marker",
       html: `
         <div style="position:relative;display:flex;align-items:center;justify-content:center;">
           ${isAlert ? `<span style="position:absolute;width:32px;height:32px;border-radius:50%;background:${color};opacity:0.2;animation:pulse-ring 2s ease-out infinite;"></span>` : ""}
-          <span style="position:relative;display:flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:50%;background:${color}20;border:2px solid ${color};font-family:var(--font-mono);font-size:10px;font-weight:bold;color:${color};">
+          <span style="position:relative;display:flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:50%;background:${color}20;border:2px solid ${color};font-family:var(--font-mono);font-size:12px;font-weight:bold;color:${color};">
             ${typeChar}
           </span>
         </div>
@@ -156,10 +158,10 @@ export default function TacticalMap({ onSelectMarker }: { onSelectMarker?: (id: 
       <div className="panel-header">
         共通状況図 (COP)
         <span className="ml-auto flex items-center gap-3">
-          <span className="readout text-[9px] text-text-dim">
+          <span className="readout text-xs text-text-dim">
             {filteredMarkers.length} マーカー
           </span>
-          <span className="flex items-center gap-1 text-alert-success text-[9px]">
+          <span className="flex items-center gap-1 text-alert-success text-xs">
             <span className="w-1.5 h-1.5 rounded-full bg-alert-success animate-pulse-dot" />
             LIVE
           </span>
@@ -184,7 +186,7 @@ export default function TacticalMap({ onSelectMarker }: { onSelectMarker?: (id: 
               .leaflet-control-zoom { border: 1px solid rgba(0,229,255,0.15) !important; }
               .leaflet-control-zoom a { background: #0f1629 !important; color: #00e5ff !important; border-bottom: 1px solid rgba(0,229,255,0.1) !important; }
               .leaflet-control-zoom a:hover { background: #151d33 !important; }
-              .leaflet-control-attribution { background: rgba(6,10,20,0.8) !important; color: #4a5568 !important; font-size: 9px !important; }
+              .leaflet-control-attribution { background: rgba(6,10,20,0.8) !important; color: #4a5568 !important; font-size: 12px !important; }
               .leaflet-control-attribution a { color: #4a5568 !important; }
               .custom-marker { background: transparent !important; border: none !important; }
             `}</style>
@@ -274,7 +276,7 @@ export default function TacticalMap({ onSelectMarker }: { onSelectMarker?: (id: 
         {/* Layer panel */}
         {showLayerPanel && (
           <div className="absolute top-2 right-12 z-[1000] bg-bg-surface/95 border border-border-active rounded p-2 space-y-1 backdrop-blur-sm animate-slide-up">
-            <div className="readout text-[9px] text-text-dim uppercase tracking-wider px-1 pb-1 border-b border-border-subtle mb-1">
+            <div className="readout text-xs text-text-dim uppercase tracking-wider px-1 pb-1 border-b border-border-subtle mb-1">
               レイヤー
             </div>
             {LAYER_CONFIG.map(cfg => {
@@ -282,7 +284,7 @@ export default function TacticalMap({ onSelectMarker }: { onSelectMarker?: (id: 
               return (
                 <button
                   key={cfg.key}
-                  className={`flex items-center gap-2 w-full px-2 py-1 rounded text-[10px] readout transition-colors ${
+                  className={`flex items-center gap-2 w-full px-2 py-1 rounded text-xs readout transition-colors ${
                     layers[cfg.key]
                       ? "text-accent-cyan bg-accent-cyan/8"
                       : "text-text-dim hover:text-text-secondary"
@@ -307,7 +309,7 @@ export default function TacticalMap({ onSelectMarker }: { onSelectMarker?: (id: 
             return (
               <div
                 key={cfg.key}
-                className={`flex items-center gap-1 readout text-[9px] px-2 py-1 rounded bg-bg-deep/80 border border-border-subtle ${
+                className={`flex items-center gap-1 readout text-xs px-2 py-1 rounded bg-bg-deep/80 border border-border-subtle ${
                   layers[cfg.key] ? "text-text-secondary" : "text-text-dim opacity-50"
                 }`}
               >
@@ -325,7 +327,7 @@ export default function TacticalMap({ onSelectMarker }: { onSelectMarker?: (id: 
       {/* Timeline slider */}
       <div className="px-3 py-2 border-t border-border-subtle flex items-center gap-3 shrink-0">
         <Clock className="w-3.5 h-3.5 text-accent-cyan-dim shrink-0" />
-        <span className="readout text-[10px] text-text-dim w-12">12:00</span>
+        <span className="readout text-xs text-text-dim w-12">12:00</span>
         <input
           type="range"
           min={0}
@@ -334,7 +336,7 @@ export default function TacticalMap({ onSelectMarker }: { onSelectMarker?: (id: 
           onChange={e => setTimeValue(Number(e.target.value))}
           className="flex-1 h-1 appearance-none bg-bg-elevated rounded cursor-pointer [&::-webkit-slider-thumb]:w-2.5 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:bg-accent-cyan [&::-webkit-slider-thumb]:rounded-sm [&::-webkit-slider-thumb]:cursor-pointer"
         />
-        <span className="readout text-[10px] text-accent-cyan w-12 text-right">
+        <span className="readout text-xs text-accent-cyan w-12 text-right">
           {timeValue === 100 ? "LIVE" : `${Math.floor(12 + timeValue * 0.024)}:${String(Math.floor((timeValue * 1.44) % 60)).padStart(2, "0")}`}
         </span>
       </div>

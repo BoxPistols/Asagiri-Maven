@@ -35,7 +35,7 @@ export default function WorkflowKanban() {
     <div className="panel flex flex-col h-full">
       <div className="panel-header">
         ワークフロー
-        <span className="ml-auto readout text-[11px] text-text-secondary">
+        <span className="ml-auto readout text-xs text-text-secondary">
           {active.length} アクティブ
         </span>
       </div>
@@ -49,17 +49,17 @@ export default function WorkflowKanban() {
             <div key={card.id} className="flex items-center gap-3 px-4 py-2.5 border-b border-border-subtle hover:bg-bg-elevated/30 transition-colors group">
               <span className={`w-2 h-2 rounded-full shrink-0 ${sevDot(card.severity)}`} />
               <div className="flex-1 min-w-0">
-                <p className="text-[12px] text-text-primary truncate">{card.title}</p>
+                <p className="text-xs text-text-primary truncate">{card.title}</p>
                 <div className="flex items-center gap-2 mt-0.5">
-                  <span className={`flex items-center gap-1 readout text-[10px] ${stage.color}`}>
+                  <span className={`flex items-center gap-1 readout text-xs ${stage.color}`}>
                     <StageIcon className="w-3 h-3" />{stage.label}
                   </span>
-                  <span className="readout text-[10px] text-text-dim">{card.assignee} · {card.eta}</span>
+                  <span className="readout text-xs text-text-dim">{card.assignee} · {card.eta}</span>
                 </div>
               </div>
               {canAdvance && (
                 <button
-                  className="btn-approve py-1 px-2 text-[10px] opacity-0 group-hover:opacity-100 transition-opacity"
+                  className="btn-approve py-1 px-2 opacity-0 group-hover:opacity-100 transition-opacity"
                   onClick={() => advanceCard(card.id)}
                 >
                   <ArrowRight className="w-3 h-3" />
@@ -71,7 +71,7 @@ export default function WorkflowKanban() {
         {done.map(card => (
           <div key={card.id} className="flex items-center gap-3 px-4 py-2 border-b border-border-subtle opacity-35">
             <CheckCircle className="w-3.5 h-3.5 text-alert-success shrink-0" />
-            <p className="text-[11px] text-text-dim truncate flex-1 line-through">{card.title}</p>
+            <p className="text-xs text-text-dim truncate flex-1 line-through">{card.title}</p>
           </div>
         ))}
       </div>

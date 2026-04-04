@@ -25,13 +25,13 @@ function KpiCard({ data }: { data: KpiData }) {
   return (
     <div className={`flex items-center gap-3 ${c.bg} border ${c.border} rounded-lg px-4 py-2`}>
       <div>
-        <div className="readout text-[10px] text-text-dim uppercase tracking-wider">{data.label}</div>
+        <div className="readout text-xs text-text-dim uppercase tracking-wider">{data.label}</div>
         <div className="flex items-baseline gap-1 mt-0.5">
           <span className={`readout text-lg font-bold ${c.text}`}>{data.value}</span>
           <span className="readout text-xs text-text-dim">{data.unit}</span>
         </div>
       </div>
-      <div className={`flex items-center gap-0.5 text-[10px] readout ${
+      <div className={`flex items-center gap-0.5 text-xs readout ${
         data.trend === "up" && data.severity !== "normal" ? "text-alert-warning" :
         data.trend === "down" && data.severity !== "normal" ? "text-alert-critical" :
         "text-text-dim"

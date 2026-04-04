@@ -26,7 +26,7 @@ export default function StatusHeader() {
           </div>
           <div>
             <span className="readout text-base text-accent-cyan font-bold tracking-[0.25em]">MAVEN</span>
-            <span className="text-[11px] text-text-dim ml-2 tracking-wide">Smart System</span>
+            <span className="text-xs text-text-dim ml-2 tracking-wide">Smart System</span>
           </div>
         </div>
         <div className="h-5 w-px bg-border-subtle" />

@@ -49,14 +49,14 @@ export default function Dashboard() {
 
       {/* Status bar */}
       <div className="h-7 border-t border-border-subtle bg-bg-primary/80 backdrop-blur-sm flex items-center px-5 justify-between shrink-0">
-        <div className="readout text-[10px] text-text-dim flex items-center gap-5">
+        <div className="readout text-xs text-text-dim flex items-center gap-5">
           <span className="flex items-center gap-1.5">
             <span className="w-1.5 h-1.5 rounded-full bg-alert-success" />
             データソース <span className="text-text-secondary">12/12</span>
           </span>
           <span>最終同期 <span className="text-accent-cyan">2秒前</span></span>
         </div>
-        <div className="readout text-[10px] text-text-dim flex items-center gap-5">
+        <div className="readout text-xs text-text-dim flex items-center gap-5">
           <span>田中太郎</span>
         </div>
       </div>

@@ -13,7 +13,7 @@ export interface MapMarker {
   id: string;
   lat: number;
   lng: number;
-  type: "facility" | "vehicle" | "alert" | "personnel";
+  type: "facility" | "vehicle" | "alert" | "personnel" | "drone";
   label: string;
   status: SeverityLevel;
   detail: string;
@@ -76,6 +76,11 @@ export const MAP_MARKERS: MapMarker[] = [
   // Personnel
   { id: "p1", lat: 35.6762, lng: 139.6503, type: "personnel", label: "田中 太郎 (管理者)", status: "normal", detail: "東京中央 | オンライン" },
   { id: "p2", lat: 34.7025, lng: 135.4959, type: "personnel", label: "佐藤 健一 (技術)", status: "normal", detail: "大阪第二 | オンライン" },
+  // Drones
+  { id: "d1", lat: 35.7100, lng: 139.8107, type: "drone", label: "ドローン D-01", status: "normal", detail: "巡回中 | 東京湾岸エリア | 高度120m" },
+  { id: "d2", lat: 35.1950, lng: 136.9300, type: "drone", label: "ドローン D-02", status: "warning", detail: "バッテリー残量22% | 名古屋拠点上空" },
+  { id: "d3", lat: 34.6500, lng: 135.5200, type: "drone", label: "ドローン D-03", status: "normal", detail: "配送中 | 大阪市内 | ETA 8分" },
+  { id: "d4", lat: 33.6200, lng: 130.4200, type: "drone", label: "ドローン D-04", status: "info", detail: "点検モード | 福岡倉庫屋上" },
 ];
 
 // Route polylines for vehicles
@@ -99,6 +104,16 @@ export const VEHICLE_ROUTES: RouteData[] = [
   {
     vehicleId: "v2",
     points: [[34.6937, 135.5023], [34.7000, 135.5000], [34.7055, 135.4983]],
+    status: "normal",
+  },
+  {
+    vehicleId: "d1",
+    points: [[35.6812, 139.7671], [35.6950, 139.7900], [35.7100, 139.8107]],
+    status: "normal",
+  },
+  {
+    vehicleId: "d3",
+    points: [[34.6937, 135.5023], [34.6700, 135.5100], [34.6500, 135.5200]],
     status: "normal",
   },
 ];

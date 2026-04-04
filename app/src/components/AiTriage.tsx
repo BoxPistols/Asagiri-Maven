@@ -29,7 +29,7 @@ function AlertCard({ alert, isExpanded, onToggle, onSelectMarker }: {
 
   return (
     <div
-      className={`border-b border-border-subtle px-4 py-3 cursor-pointer transition-colors hover:bg-bg-elevated/30`}
+      className="border-b border-border-subtle px-4 py-3 cursor-pointer transition-colors hover:bg-bg-elevated/30"
       onClick={onToggle}
     >
       <div className="flex items-start gap-3">
@@ -41,7 +41,7 @@ function AlertCard({ alert, isExpanded, onToggle, onSelectMarker }: {
               {alert.score}
             </span>
           </div>
-          <div className="flex items-center gap-3 text-[11px] text-text-dim readout">
+          <div className="flex items-center gap-3 text-xs text-text-dim readout">
             <span>{alert.category}</span>
             <span className="flex items-center gap-1"><MapPin className="w-3 h-3" />{alert.location}</span>
             <span className="ml-auto">{alert.timestamp}</span>
@@ -52,12 +52,12 @@ function AlertCard({ alert, isExpanded, onToggle, onSelectMarker }: {
 
       {isExpanded && (
         <div className="mt-3 ml-7 animate-slide-up">
-          <p className="text-[12px] text-text-secondary leading-relaxed mb-3">{alert.description}</p>
+          <p className="text-xs text-text-secondary leading-relaxed mb-3">{alert.description}</p>
           <div className={`flex items-start gap-2.5 p-3 rounded-lg ${cfg.bg} border ${cfg.border}`}>
             <Zap className={`w-4 h-4 ${cfg.color} shrink-0`} />
             <div>
-              <div className="readout text-[10px] text-text-dim uppercase tracking-wider mb-1">推奨アクション</div>
-              <p className="text-[12px] text-text-primary leading-relaxed">{alert.suggestedAction}</p>
+              <div className="readout text-xs text-text-dim uppercase tracking-wider mb-1">推奨アクション</div>
+              <p className="text-xs text-text-primary leading-relaxed">{alert.suggestedAction}</p>
             </div>
           </div>
           <div className="flex gap-2 mt-3">
@@ -87,7 +87,7 @@ export default function AiTriage({ onSelectMarker }: { onSelectMarker?: (id: str
     <div className="panel flex flex-col h-full">
       <div className="panel-header">
         AI検知
-        <span className="ml-auto readout text-[11px] text-text-secondary">
+        <span className="ml-auto readout text-xs text-text-secondary">
           {ALERT_ITEMS.length} 件
         </span>
       </div>
