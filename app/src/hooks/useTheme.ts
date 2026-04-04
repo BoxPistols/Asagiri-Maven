@@ -1,18 +1,29 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useState } from "react";
 
 type Theme = "dark" | "light";
 
-export function useTheme() {
+interface ThemeContextValue {
+  theme: Theme;
+  setTheme: (t: Theme) => void;
+  toggle: () => void;
+}
+
+export const ThemeContext = createContext<ThemeContextValue>({
+  theme: "dark",
+  setTheme: () => {},
+  toggle: () => {},
+});
+
+export function useThemeProvider() {
   const [theme, setThemeState] = useState<Theme>("dark");
 
   useEffect(() => {
     const stored = localStorage.getItem("maven-theme") as Theme | null;
-    if (stored) {
-      setThemeState(stored);
-      document.documentElement.setAttribute("data-theme", stored);
-    }
+    const initial = stored ?? "dark";
+    setThemeState(initial);
+    document.documentElement.setAttribute("data-theme", initial);
   }, []);
 
   const setTheme = useCallback((t: Theme) => {
@@ -22,8 +33,17 @@ export function useTheme() {
   }, []);
 
   const toggle = useCallback(() => {
-    setTheme(theme === "dark" ? "light" : "dark");
-  }, [theme, setTheme]);
+    setThemeState(prev => {
+      const next = prev === "dark" ? "light" : "dark";
+      document.documentElement.setAttribute("data-theme", next);
+      localStorage.setItem("maven-theme", next);
+      return next;
+    });
+  }, []);
 
   return { theme, setTheme, toggle };
+}
+
+export function useTheme() {
+  return useContext(ThemeContext);
 }
