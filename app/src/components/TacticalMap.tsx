@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { MAP_MARKERS, VEHICLE_ROUTES, type MapMarker, type SeverityLevel } from "@/lib/mock-data";
 import { Layers, Crosshair, Clock, Warehouse, Truck, AlertTriangle, User, Navigation } from "lucide-react";
+import { useTheme } from "@/hooks/useTheme";
 import dynamic from "next/dynamic";
 
 // Lazy load map to avoid SSR issues with Leaflet
@@ -91,9 +92,9 @@ function MarkerPopupContent({ marker }: { marker: MapMarker }) {
           {marker.status}
         </span>
       </div>
-      <div className="text-sm font-semibold mb-1" style={{ color: "#f1f5f9" }}>{marker.label}</div>
-      <div className="text-xs" style={{ color: "#94a3b8" }}>{marker.detail}</div>
-      <div className="text-xs mt-1.5 pt-1.5 readout" style={{ color: "#64748b", borderTop: "1px solid #1e293b" }}>
+      <div className="text-sm font-semibold mb-1" style={{ color: "var(--text-primary)" }}>{marker.label}</div>
+      <div className="text-xs" style={{ color: "var(--text-secondary)" }}>{marker.detail}</div>
+      <div className="text-xs mt-1.5 pt-1.5 readout" style={{ color: "var(--text-dim)", borderTop: "1px solid var(--border-subtle)" }}>
         {marker.lat.toFixed(4)}, {marker.lng.toFixed(4)}
       </div>
     </div>
@@ -110,7 +111,11 @@ const LAYER_CONFIG: { key: LayerType; label: string; icon: typeof Warehouse }[] 
   { key: "personnel", label: "人員", icon: User },
 ];
 
+const TILE_DARK = "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png";
+const TILE_LIGHT = "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png";
+
 export default function TacticalMap({ onSelectMarker }: { onSelectMarker?: (id: string | null) => void }) {
+  const { theme } = useTheme();
   const [mounted, setMounted] = useState(false);
   const [timeValue, setTimeValue] = useState(100);
   const [layers, setLayers] = useState<Record<LayerType, boolean>>({
@@ -177,17 +182,17 @@ export default function TacticalMap({ onSelectMarker }: { onSelectMarker?: (id: 
               href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
             />
             <style>{`
-              .leaflet-container { background: #060a14; height: 100%; width: 100%; }
-              .leaflet-popup-content-wrapper { background: #0f1629; border: 1px solid rgba(0,229,255,0.2); border-radius: 4px; box-shadow: 0 0 20px rgba(0,229,255,0.1); }
-              .leaflet-popup-tip { background: #0f1629; border-right: 1px solid rgba(0,229,255,0.2); border-bottom: 1px solid rgba(0,229,255,0.2); }
-              .leaflet-popup-content { margin: 8px 10px; }
-              .leaflet-popup-close-button { color: #8892a8 !important; }
-              .leaflet-popup-close-button:hover { color: #00e5ff !important; }
-              .leaflet-control-zoom { border: 1px solid rgba(0,229,255,0.15) !important; }
-              .leaflet-control-zoom a { background: #0f1629 !important; color: #00e5ff !important; border-bottom: 1px solid rgba(0,229,255,0.1) !important; }
-              .leaflet-control-zoom a:hover { background: #151d33 !important; }
-              .leaflet-control-attribution { background: rgba(6,10,20,0.8) !important; color: #4a5568 !important; font-size: 12px !important; }
-              .leaflet-control-attribution a { color: #4a5568 !important; }
+              .leaflet-container { background: var(--bg-deep); height: 100%; width: 100%; }
+              .leaflet-popup-content-wrapper { background: var(--bg-surface); border: 1px solid var(--border-active); border-radius: 6px; box-shadow: 0 4px 20px rgba(0,0,0,0.15); }
+              .leaflet-popup-tip { background: var(--bg-surface); border-right: 1px solid var(--border-active); border-bottom: 1px solid var(--border-active); }
+              .leaflet-popup-content { margin: 10px 12px; }
+              .leaflet-popup-close-button { color: var(--text-dim) !important; font-size: 18px !important; }
+              .leaflet-popup-close-button:hover { color: var(--accent-cyan) !important; }
+              .leaflet-control-zoom { border: 1px solid var(--border-subtle) !important; border-radius: 6px !important; overflow: hidden; }
+              .leaflet-control-zoom a { background: var(--bg-surface) !important; color: var(--accent-cyan) !important; border-bottom: 1px solid var(--border-subtle) !important; }
+              .leaflet-control-zoom a:hover { background: var(--bg-elevated) !important; }
+              .leaflet-control-attribution { background: var(--bg-primary) !important; color: var(--text-dim) !important; font-size: 12px !important; opacity: 0.8; }
+              .leaflet-control-attribution a { color: var(--text-dim) !important; }
               .custom-marker { background: transparent !important; border: none !important; }
             `}</style>
             <MapContainer
@@ -198,8 +203,9 @@ export default function TacticalMap({ onSelectMarker }: { onSelectMarker?: (id: 
               style={{ height: "100%", width: "100%" }}
             >
               <TileLayer
+                key={theme}
                 attribution='&copy; <a href="https://carto.com/">CARTO</a>'
-                url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
+                url={theme === "light" ? TILE_LIGHT : TILE_DARK}
               />
 
               {/* Vehicle routes */}

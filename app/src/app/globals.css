@@ -1,6 +1,7 @@
 @import url('https://fonts.googleapis.com/css2?family=Exo+2:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&family=Share+Tech+Mono&display=swap');
 @import "tailwindcss";
 
+/* ========== Dark theme (default) ========== */
 :root {
   --bg-deep: #070b15;
   --bg-primary: #0b1020;
@@ -17,11 +18,8 @@
 
   --alert-critical: #f87171;
   --alert-critical-dark: #dc2626;
-  --alert-critical-glow: rgba(248, 113, 113, 0.2);
   --alert-warning: #fbbf24;
-  --alert-warning-glow: rgba(251, 191, 36, 0.15);
   --alert-success: #34d399;
-  --alert-success-glow: rgba(52, 211, 153, 0.15);
   --alert-info: #60a5fa;
 
   --text-primary: #f1f5f9;
@@ -38,6 +36,58 @@
 
   --grid-line: rgba(34, 211, 238, 0.03);
   --scanline-opacity: 0.015;
+
+  --panel-header-bg: rgba(16, 24, 40, 0.5);
+  --btn-tactical-bg: rgba(34, 211, 238, 0.05);
+  --btn-tactical-hover: rgba(34, 211, 238, 0.12);
+  --btn-approve-bg: rgba(52, 211, 153, 0.06);
+  --btn-approve-hover: rgba(52, 211, 153, 0.15);
+  --btn-approve-border: rgba(52, 211, 153, 0.35);
+
+  --map-tile: dark;
+}
+
+/* ========== Light theme ========== */
+[data-theme="light"] {
+  --bg-deep: #f8fafc;
+  --bg-primary: #f1f5f9;
+  --bg-surface: #ffffff;
+  --bg-elevated: #f8fafc;
+  --bg-panel: #ffffff;
+
+  --accent-cyan: #0891b2;
+  --accent-cyan-dim: #06b6d4;
+  --accent-cyan-glow: rgba(8, 145, 178, 0.1);
+  --accent-blue: #3b82f6;
+  --accent-indigo: #6366f1;
+  --accent-purple: #9333ea;
+
+  --alert-critical: #dc2626;
+  --alert-critical-dark: #b91c1c;
+  --alert-warning: #d97706;
+  --alert-success: #059669;
+  --alert-info: #2563eb;
+
+  --text-primary: #0f172a;
+  --text-secondary: #475569;
+  --text-dim: #94a3b8;
+  --text-accent: var(--accent-cyan);
+
+  --border-subtle: rgba(15, 23, 42, 0.08);
+  --border-active: rgba(8, 145, 178, 0.3);
+  --border-glow: rgba(8, 145, 178, 0.4);
+
+  --grid-line: rgba(8, 145, 178, 0.04);
+  --scanline-opacity: 0;
+
+  --panel-header-bg: rgba(241, 245, 249, 0.8);
+  --btn-tactical-bg: rgba(8, 145, 178, 0.06);
+  --btn-tactical-hover: rgba(8, 145, 178, 0.12);
+  --btn-approve-bg: rgba(5, 150, 105, 0.06);
+  --btn-approve-hover: rgba(5, 150, 105, 0.12);
+  --btn-approve-border: rgba(5, 150, 105, 0.3);
+
+  --map-tile: light;
 }
 
 @theme inline {
@@ -75,6 +125,7 @@
 html {
   background: var(--bg-deep);
   color: var(--text-primary);
+  transition: background-color 0.2s ease, color 0.2s ease;
 }
 
 body {
@@ -84,7 +135,6 @@ body {
   min-height: 100vh;
 }
 
-/* Subtle scanline — very low opacity for atmosphere without hindering readability */
 body::after {
   content: '';
   position: fixed;
@@ -100,7 +150,6 @@ body::after {
   );
 }
 
-/* Grid background pattern */
 .tactical-grid {
   background-image:
     linear-gradient(var(--grid-line) 1px, transparent 1px),
@@ -108,7 +157,7 @@ body::after {
   background-size: 48px 48px;
 }
 
-/* Glow effects */
+/* Glow effects — suppressed in light mode */
 .glow-cyan {
   box-shadow: 0 0 6px rgba(34,211,238,0.12), 0 0 16px rgba(34,211,238,0.06), inset 0 0 8px rgba(34,211,238,0.03);
 }
@@ -121,8 +170,14 @@ body::after {
 .glow-amber {
   box-shadow: 0 0 6px rgba(251,191,36,0.15), 0 0 16px rgba(251,191,36,0.08);
 }
+[data-theme="light"] .glow-cyan,
+[data-theme="light"] .glow-cyan-strong,
+[data-theme="light"] .glow-red,
+[data-theme="light"] .glow-amber {
+  box-shadow: 0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
+}
 
-/* Panel base style */
+/* Panel */
 .panel {
   background: var(--bg-surface);
   border: 1px solid var(--border-subtle);
@@ -133,16 +188,19 @@ body::after {
 .panel::before {
   content: '';
   position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
+  top: 0; left: 0; right: 0;
   height: 1px;
   background: linear-gradient(90deg, transparent, var(--accent-cyan), transparent);
   opacity: 0.3;
   z-index: 1;
 }
+[data-theme="light"] .panel {
+  box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+}
+[data-theme="light"] .panel::before {
+  opacity: 0.15;
+}
 
-/* Panel header — larger text for readability */
 .panel-header {
   font-family: var(--font-mono);
   font-size: 12px;
@@ -152,7 +210,7 @@ body::after {
   color: var(--accent-cyan);
   padding: 10px 14px;
   border-bottom: 1px solid var(--border-subtle);
-  background: rgba(16, 24, 40, 0.5);
+  background: var(--panel-header-bg);
   display: flex;
   align-items: center;
   gap: 8px;
@@ -196,13 +254,12 @@ body::after {
 .animate-slide-up { animation: slide-in-up 0.25s ease-out; }
 .animate-glow-pulse { animation: glow-pulse 3s ease-in-out infinite; }
 
-/* Mono readout style */
 .readout {
   font-family: var(--font-mono);
   letter-spacing: 0.04em;
 }
 
-/* Tactical button — larger touch targets */
+/* Buttons */
 .btn-tactical {
   font-family: var(--font-mono);
   font-size: 12px;
@@ -210,7 +267,7 @@ body::after {
   letter-spacing: 0.08em;
   padding: 7px 14px;
   border: 1px solid var(--border-active);
-  background: rgba(34, 211, 238, 0.05);
+  background: var(--btn-tactical-bg);
   color: var(--accent-cyan);
   cursor: pointer;
   transition: all 0.15s ease;
@@ -221,13 +278,10 @@ body::after {
   gap: 4px;
 }
 .btn-tactical:hover {
-  background: rgba(34, 211, 238, 0.12);
-  box-shadow: 0 0 10px rgba(34, 211, 238, 0.15);
+  background: var(--btn-tactical-hover);
   border-color: var(--border-glow);
 }
-.btn-tactical:active {
-  transform: scale(0.97);
-}
+.btn-tactical:active { transform: scale(0.97); }
 
 .btn-approve {
   font-family: var(--font-mono);
@@ -235,8 +289,8 @@ body::after {
   text-transform: uppercase;
   letter-spacing: 0.08em;
   padding: 7px 14px;
-  border: 1px solid rgba(52, 211, 153, 0.35);
-  background: rgba(52, 211, 153, 0.06);
+  border: 1px solid var(--btn-approve-border);
+  background: var(--btn-approve-bg);
   color: var(--alert-success);
   cursor: pointer;
   transition: all 0.15s ease;
@@ -246,10 +300,5 @@ body::after {
   align-items: center;
   gap: 4px;
 }
-.btn-approve:hover {
-  background: rgba(52, 211, 153, 0.15);
-  box-shadow: 0 0 10px rgba(52, 211, 153, 0.2);
-}
-.btn-approve:active {
-  transform: scale(0.97);
-}
+.btn-approve:hover { background: var(--btn-approve-hover); }
+.btn-approve:active { transform: scale(0.97); }
