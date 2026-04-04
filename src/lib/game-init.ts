@@ -709,7 +709,7 @@ export function createInitialGameState(): GameState {
         id: "log-init",
         role: "system",
         content: "MAVEN COMMAND システム起動 — 全接続確認完了",
-        timestamp: new Date().toISOString(),
+        timestamp: "00:00",
         turn: 0,
       },
     ],

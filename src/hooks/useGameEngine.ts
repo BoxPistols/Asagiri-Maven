@@ -26,13 +26,12 @@ export interface GameContextValue {
   dispatch: React.Dispatch<GameAction>;
 }
 
-export const GameContext = createContext<GameContextValue>({
-  state: createInitialGameState(),
-  dispatch: () => {},
-});
+export const GameContext = createContext<GameContextValue | null>(null);
 
 export function useGame(): GameContextValue {
-  return useContext(GameContext);
+  const ctx = useContext(GameContext);
+  if (!ctx) throw new Error("useGame must be used within GameContext");
+  return ctx;
 }
 
 // ---------------------------------------------------------------------------
@@ -44,7 +43,8 @@ function uid(): string {
 }
 
 function now(): string {
-  return new Date().toISOString();
+  const d = new Date();
+  return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
 }
 
 function makeLog(
