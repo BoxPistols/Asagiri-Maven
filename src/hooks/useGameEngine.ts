@@ -16,6 +16,7 @@ import {
   moveEnemyUnits,
   resolveEngagements,
 } from "@/lib/enemy-ai";
+import { pickIntelMessage } from "@/lib/intel-scripts";
 
 // ---------------------------------------------------------------------------
 // Context
@@ -91,7 +92,7 @@ function spawnEvents(state: GameState): { events: GameEvent[]; log: GameLogEntry
   const waveConfig = getWaveConfig(state.wave);
   const newEvents = generateEnemyActions(state, waveConfig);
   const log = newEvents.map((e) =>
-    makeLog("intel", `[新規脅威] ${e.title} — ${e.location}`, state.turn),
+    makeLog("intel", `[新規脅威] ${e.title} — ${e.location}. ${pickIntelMessage("event_detected", state.wave)}`, state.turn),
   );
   return { events: [...state.events, ...newEvents], log };
 }
@@ -362,6 +363,9 @@ function gameReducer(state: GameState, action: GameAction): GameState {
       for (const msg of combatLog) {
         allLogs.push(makeLog("combat", msg, nextTurn));
       }
+      if (combatLog.length > 0) {
+        allLogs.push(makeLog("intel", pickIntelMessage("combat_result", s.wave), nextTurn));
+      }
 
       // 5. Resolve events
       const resolvedEvents = resolveEvents(s);
@@ -371,13 +375,18 @@ function gameReducer(state: GameState, action: GameAction): GameState {
       const kpis = applyKpiDrain(s);
       s = { ...s, kpis };
 
+      // KPI warning
+      for (const [key, val] of Object.entries(kpis)) {
+        if (val <= 30 && val > 0) {
+          allLogs.push(makeLog("intel", pickIntelMessage("kpi_warning", s.wave), nextTurn));
+          break;
+        }
+      }
+
       // 7. Win/lose check
       const endResult = checkEndConditions(s);
       if (endResult) {
-        const msg =
-          endResult === "victory"
-            ? "作戦勝利！ 敵旗艦を撃沈しました。日本は守られた。"
-            : "作戦失敗… 防衛線が突破されました。";
+        const msg = pickIntelMessage(endResult === "victory" ? "victory" : "defeat", s.wave);
         allLogs.push(makeLog("system", msg, nextTurn));
         return {
           ...s,
