@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState, useMemo } from "react";
+import { useCallback, useRef, useState, useMemo } from "react";
 import { ThemeContext, useThemeProvider } from "@/hooks/useTheme";
 import { GameContext, useGameProvider } from "@/hooks/useGameEngine";
 import StatusHeader from "@/components/StatusHeader";
@@ -11,6 +11,7 @@ import WorkflowKanban from "@/components/WorkflowKanban";
 import ChatInterface from "@/components/ChatInterface";
 import GameOverlay from "@/components/GameOverlay";
 import GameControls from "@/components/GameControls";
+import ResizeHandle from "@/components/ResizeHandle";
 import type {
   GameEvent,
   GameUnit,
@@ -19,6 +20,73 @@ import type {
   GameLogEntry,
 } from "@/lib/game-types";
 import type { AlertItem, MapMarker, KpiData, WorkflowCard, ChatMessage, SeverityLevel } from "@/lib/mock-data";
+
+// ========== Resizable Sidebar ==========
+
+const MIN_PANEL = 80;
+
+function SidebarPanels({ alerts, workflowCards, chatMessages, onSelectMarker, onDispatch, onAdvanceMission }: {
+  alerts: AlertItem[];
+  workflowCards: WorkflowCard[];
+  chatMessages: ChatMessage[];
+  onSelectMarker: (id: string | null) => void;
+  onDispatch: (eventId: string) => void;
+  onAdvanceMission: (missionId: string) => void;
+}) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  // Store panel heights as ratios (percent of container)
+  const [splits, setSplits] = useState({ triageRatio: 0.42, workflowRatio: 0.28 });
+  // chat gets the remainder: 1 - triage - workflow
+
+  const handleResize1 = useCallback((deltaY: number) => {
+    if (!containerRef.current) return;
+    const h = containerRef.current.clientHeight;
+    if (h === 0) return;
+    const deltaRatio = deltaY / h;
+    setSplits(prev => {
+      const newTriage = Math.max(MIN_PANEL / h, Math.min(prev.triageRatio + deltaRatio, 1 - prev.workflowRatio - MIN_PANEL / h));
+      return { ...prev, triageRatio: newTriage };
+    });
+  }, []);
+
+  const handleResize2 = useCallback((deltaY: number) => {
+    if (!containerRef.current) return;
+    const h = containerRef.current.clientHeight;
+    if (h === 0) return;
+    const deltaRatio = deltaY / h;
+    setSplits(prev => {
+      const newWorkflow = Math.max(MIN_PANEL / h, Math.min(prev.workflowRatio + deltaRatio, 1 - prev.triageRatio - MIN_PANEL / h));
+      return { ...prev, workflowRatio: newWorkflow };
+    });
+  }, []);
+
+  const triagePct = `${splits.triageRatio * 100}%`;
+  const workflowPct = `${splits.workflowRatio * 100}%`;
+  // chat is the rest, handled by flex-1
+
+  return (
+    <div ref={containerRef} className="w-[380px] shrink-0 flex flex-col border-l border-border-subtle">
+      <div className="min-h-0 overflow-hidden" style={{ height: triagePct }}>
+        <AiTriage
+          onSelectMarker={onSelectMarker}
+          alerts={alerts}
+          onDispatch={onDispatch}
+        />
+      </div>
+      <ResizeHandle onResize={handleResize1} />
+      <div className="min-h-0 overflow-hidden" style={{ height: workflowPct }}>
+        <WorkflowKanban
+          cards={workflowCards}
+          onAdvance={onAdvanceMission}
+        />
+      </div>
+      <ResizeHandle onResize={handleResize2} />
+      <div className="flex-1 min-h-0 overflow-hidden">
+        <ChatInterface messages={chatMessages} />
+      </div>
+    </div>
+  );
+}
 
 // ========== Adapter functions: game state -> component props ==========
 
@@ -221,24 +289,14 @@ export default function Dashboard() {
               </div>
             </div>
 
-            <div className="w-[380px] shrink-0 flex flex-col border-l border-border-subtle">
-              <div className="flex-[3] border-b border-border-subtle min-h-0 overflow-hidden">
-                <AiTriage
-                  onSelectMarker={handleSelectMarker}
-                  alerts={alerts}
-                  onDispatch={handleDispatch}
-                />
-              </div>
-              <div className="flex-[2] border-b border-border-subtle min-h-0 overflow-hidden">
-                <WorkflowKanban
-                  cards={workflowCards}
-                  onAdvance={handleAdvanceMission}
-                />
-              </div>
-              <div className="flex-[2] min-h-0 overflow-hidden">
-                <ChatInterface messages={chatMessages} />
-              </div>
-            </div>
+            <SidebarPanels
+              alerts={alerts}
+              workflowCards={workflowCards}
+              chatMessages={chatMessages}
+              onSelectMarker={handleSelectMarker}
+              onDispatch={handleDispatch}
+              onAdvanceMission={handleAdvanceMission}
+            />
           </div>
 
           <div className="h-7 border-t border-border-subtle bg-bg-primary/80 backdrop-blur-sm flex items-center px-5 justify-between shrink-0">
