@@ -136,8 +136,8 @@ export default function ChatInterface() {
               if (e.key === "Enter" && !e.nativeEvent.isComposing) sendMessage(input);
             }}
             placeholder="指示を入力..."
-            className="flex-1 bg-transparent text-xs text-text-primary placeholder-text-dim outline-none readout"
-            style={{ fontSize: "16px", transform: "scale(0.75)", transformOrigin: "left center", width: "133%" }}
+            className="flex-1 bg-transparent text-text-primary placeholder-text-dim outline-none readout"
+            style={{ fontSize: "16px" }}
           />
           <button
             onClick={() => sendMessage(input)}

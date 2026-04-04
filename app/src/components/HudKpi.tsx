@@ -5,10 +5,10 @@ import { KPI_DATA, type KpiData, type SeverityLevel } from "@/lib/mock-data";
 
 function severityColor(s: SeverityLevel) {
   switch (s) {
-    case "critical": return { text: "text-alert-critical", border: "border-alert-critical/30", bg: "bg-alert-critical/5", glow: "glow-red" };
-    case "warning": return { text: "text-alert-warning", border: "border-alert-warning/30", bg: "bg-alert-warning/5", glow: "glow-amber" };
-    case "info": return { text: "text-accent-cyan", border: "border-accent-cyan/20", bg: "bg-accent-cyan/5", glow: "glow-cyan" };
-    default: return { text: "text-text-secondary", border: "border-border-subtle", bg: "bg-bg-surface", glow: "" };
+    case "critical": return { text: "text-alert-critical", border: "border-alert-critical/20", bg: "bg-alert-critical/5" };
+    case "warning": return { text: "text-alert-warning", border: "border-alert-warning/15", bg: "bg-alert-warning/4" };
+    case "info": return { text: "text-accent-cyan", border: "border-accent-cyan/12", bg: "bg-accent-cyan/3" };
+    default: return { text: "text-text-primary", border: "border-border-subtle", bg: "bg-transparent" };
   }
 }
 
@@ -20,21 +20,18 @@ function TrendIcon({ trend }: { trend: KpiData["trend"] }) {
   }
 }
 
-function KpiCard({ data, index }: { data: KpiData; index: number }) {
+function KpiCard({ data }: { data: KpiData }) {
   const c = severityColor(data.severity);
   return (
-    <div
-      className={`${c.bg} ${c.glow} border ${c.border} rounded px-3 py-2 min-w-[120px] animate-slide-up`}
-      style={{ animationDelay: `${index * 80}ms`, animationFillMode: "both" }}
-    >
-      <div className="readout text-[10px] text-text-dim uppercase tracking-wider mb-1">
-        {data.label}
+    <div className={`flex items-center gap-3 ${c.bg} border ${c.border} rounded-lg px-4 py-2`}>
+      <div>
+        <div className="readout text-[10px] text-text-dim uppercase tracking-wider">{data.label}</div>
+        <div className="flex items-baseline gap-1 mt-0.5">
+          <span className={`readout text-lg font-bold ${c.text}`}>{data.value}</span>
+          <span className="readout text-xs text-text-dim">{data.unit}</span>
+        </div>
       </div>
-      <div className="flex items-baseline gap-1.5">
-        <span className={`readout text-xl font-bold ${c.text}`}>{data.value}</span>
-        <span className="readout text-xs text-text-dim">{data.unit}</span>
-      </div>
-      <div className={`flex items-center gap-1 mt-0.5 text-[10px] readout ${
+      <div className={`flex items-center gap-0.5 text-[10px] readout ${
         data.trend === "up" && data.severity !== "normal" ? "text-alert-warning" :
         data.trend === "down" && data.severity !== "normal" ? "text-alert-critical" :
         "text-text-dim"
@@ -48,9 +45,9 @@ function KpiCard({ data, index }: { data: KpiData; index: number }) {
 
 export default function HudKpi() {
   return (
-    <div className="flex items-center gap-2 overflow-x-auto py-1 px-1">
-      {KPI_DATA.map((d, i) => (
-        <KpiCard key={d.label} data={d} index={i} />
+    <div className="flex items-center gap-2 overflow-x-auto">
+      {KPI_DATA.map(d => (
+        <KpiCard key={d.label} data={d} />
       ))}
     </div>
   );

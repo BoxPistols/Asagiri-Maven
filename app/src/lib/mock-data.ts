@@ -11,8 +11,8 @@ export interface KpiData {
 
 export interface MapMarker {
   id: string;
-  x: number;
-  y: number;
+  lat: number;
+  lng: number;
   type: "facility" | "vehicle" | "alert" | "personnel";
   label: string;
   status: SeverityLevel;
@@ -59,16 +59,48 @@ export const KPI_DATA: KpiData[] = [
 ];
 
 export const MAP_MARKERS: MapMarker[] = [
-  { id: "f1", x: 25, y: 30, type: "facility", label: "東京中央倉庫", status: "critical", detail: "在庫不足 3品目" },
-  { id: "f2", x: 65, y: 25, type: "facility", label: "大阪第二拠点", status: "normal", detail: "正常稼働中" },
-  { id: "f3", x: 45, y: 55, type: "facility", label: "名古屋配送センター", status: "warning", detail: "設備点検アラート" },
-  { id: "v1", x: 35, y: 40, type: "vehicle", label: "配送車 T-04", status: "warning", detail: "遅延 25分" },
-  { id: "v2", x: 55, y: 35, type: "vehicle", label: "配送車 O-11", status: "normal", detail: "予定通り" },
-  { id: "v3", x: 30, y: 50, type: "vehicle", label: "配送車 N-07", status: "critical", detail: "ルート障害発生" },
-  { id: "a1", x: 20, y: 35, type: "alert", label: "需要急増検知", status: "critical", detail: "品番 A-2240" },
-  { id: "a2", x: 50, y: 45, type: "alert", label: "温度異常", status: "warning", detail: "冷蔵庫 #3" },
-  { id: "p1", x: 28, y: 28, type: "personnel", label: "田中 (管理者)", status: "normal", detail: "東京中央" },
-  { id: "p2", x: 62, y: 22, type: "personnel", label: "佐藤 (技術)", status: "normal", detail: "大阪第二" },
+  // Facilities (real coordinates)
+  { id: "f1", lat: 35.6812, lng: 139.7671, type: "facility", label: "東京中央倉庫", status: "critical", detail: "在庫不足 3品目 | 充足率 82.3%" },
+  { id: "f2", lat: 34.6937, lng: 135.5023, type: "facility", label: "大阪第二拠点", status: "normal", detail: "正常稼働 | 稼働率 96.8%" },
+  { id: "f3", lat: 35.1815, lng: 136.9066, type: "facility", label: "名古屋配送センター", status: "warning", detail: "設備点検アラート | 冷蔵庫#3" },
+  { id: "f4", lat: 33.5904, lng: 130.4017, type: "facility", label: "福岡物流拠点", status: "normal", detail: "正常稼働 | 充足率 94.1%" },
+  { id: "f5", lat: 43.0621, lng: 141.3544, type: "facility", label: "札幌倉庫", status: "normal", detail: "正常稼働 | 充足率 91.5%" },
+  // Vehicles
+  { id: "v1", lat: 35.6284, lng: 139.7387, type: "vehicle", label: "配送車 T-04", status: "warning", detail: "遅延 25分 | 品川区付近" },
+  { id: "v2", lat: 34.7055, lng: 135.4983, type: "vehicle", label: "配送車 O-11", status: "normal", detail: "予定通り | 大阪市内配送中" },
+  { id: "v3", lat: 35.0116, lng: 137.0700, type: "vehicle", label: "配送車 N-07", status: "critical", detail: "ルート障害 | 国道1号線停滞" },
+  { id: "v4", lat: 35.3912, lng: 136.7223, type: "vehicle", label: "配送車 N-12", status: "normal", detail: "予定通り | 岐阜方面" },
+  // Alerts
+  { id: "a1", lat: 35.6895, lng: 139.6917, type: "alert", label: "需要急増検知", status: "critical", detail: "品番 A-2240 | 48h以内枯渇" },
+  { id: "a2", lat: 35.1700, lng: 136.8815, type: "alert", label: "温度異常", status: "warning", detail: "冷蔵庫 #3 | +2.3℃逸脱" },
+  // Personnel
+  { id: "p1", lat: 35.6762, lng: 139.6503, type: "personnel", label: "田中 太郎 (管理者)", status: "normal", detail: "東京中央 | オンライン" },
+  { id: "p2", lat: 34.7025, lng: 135.4959, type: "personnel", label: "佐藤 健一 (技術)", status: "normal", detail: "大阪第二 | オンライン" },
+];
+
+// Route polylines for vehicles
+export interface RouteData {
+  vehicleId: string;
+  points: [number, number][];
+  status: SeverityLevel;
+}
+
+export const VEHICLE_ROUTES: RouteData[] = [
+  {
+    vehicleId: "v1",
+    points: [[35.6812, 139.7671], [35.6600, 139.7500], [35.6284, 139.7387]],
+    status: "warning",
+  },
+  {
+    vehicleId: "v3",
+    points: [[35.1815, 136.9066], [35.1000, 137.0000], [35.0116, 137.0700]],
+    status: "critical",
+  },
+  {
+    vehicleId: "v2",
+    points: [[34.6937, 135.5023], [34.7000, 135.5000], [34.7055, 135.4983]],
+    status: "normal",
+  },
 ];
 
 export const ALERT_ITEMS: AlertItem[] = [

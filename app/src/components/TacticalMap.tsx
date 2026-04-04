@@ -1,199 +1,329 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { MAP_MARKERS, type MapMarker, type SeverityLevel } from "@/lib/mock-data";
-import { Layers, ZoomIn, ZoomOut, Crosshair, Clock } from "lucide-react";
+import { useState, useEffect, useMemo } from "react";
+import { MAP_MARKERS, VEHICLE_ROUTES, type MapMarker, type SeverityLevel } from "@/lib/mock-data";
+import { Layers, Crosshair, Clock, Warehouse, Truck, AlertTriangle, User } from "lucide-react";
+import dynamic from "next/dynamic";
 
-function markerColor(status: SeverityLevel) {
-  switch (status) {
-    case "critical": return { fill: "#ff1744", ring: "rgba(255,23,68,0.3)" };
-    case "warning": return { fill: "#ff9100", ring: "rgba(255,145,0,0.3)" };
-    case "info": return { fill: "#00e5ff", ring: "rgba(0,229,255,0.3)" };
-    default: return { fill: "#00e676", ring: "rgba(0,230,118,0.2)" };
+// Lazy load map to avoid SSR issues with Leaflet
+const MapContainer = dynamic(
+  () => import("react-leaflet").then(m => m.MapContainer),
+  { ssr: false }
+);
+const TileLayer = dynamic(
+  () => import("react-leaflet").then(m => m.TileLayer),
+  { ssr: false }
+);
+const Marker = dynamic(
+  () => import("react-leaflet").then(m => m.Marker),
+  { ssr: false }
+);
+const Popup = dynamic(
+  () => import("react-leaflet").then(m => m.Popup),
+  { ssr: false }
+);
+const Polyline = dynamic(
+  () => import("react-leaflet").then(m => m.Polyline),
+  { ssr: false }
+);
+const CircleMarker = dynamic(
+  () => import("react-leaflet").then(m => m.CircleMarker),
+  { ssr: false }
+);
+
+function statusColor(s: SeverityLevel): string {
+  switch (s) {
+    case "critical": return "#f87171";
+    case "warning": return "#fbbf24";
+    case "info": return "#22d3ee";
+    default: return "#34d399";
   }
 }
 
-function markerShape(type: MapMarker["type"]) {
+function typeIcon(type: MapMarker["type"]) {
   switch (type) {
-    case "facility": return "M-6,-6 L6,-6 L6,6 L-6,6 Z";
-    case "vehicle": return "M0,-7 L6,4 L-6,4 Z";
-    case "alert": return "M0,-7 L7,0 L0,7 L-7,0 Z";
-    case "personnel": return "";
-    default: return "";
+    case "facility": return Warehouse;
+    case "vehicle": return Truck;
+    case "alert": return AlertTriangle;
+    case "personnel": return User;
   }
 }
 
-function MapMarkerSvg({ marker, isSelected, onClick }: {
-  marker: MapMarker;
-  isSelected: boolean;
-  onClick: () => void;
-}) {
-  const c = markerColor(marker.status);
-  const isPerson = marker.type === "personnel";
+function MarkerIcon({ marker }: { marker: MapMarker }) {
+  const color = statusColor(marker.status);
+  const Icon = typeIcon(marker.type);
   const isAlert = marker.status === "critical" || marker.status === "warning";
 
   return (
-    <g
-      transform={`translate(${marker.x * 7.2}, ${marker.y * 4.8})`}
-      onClick={onClick}
-      className="cursor-pointer"
-    >
-      {/* Pulse ring for alerts */}
+    <div className="relative flex items-center justify-center">
       {isAlert && (
-        <circle r="12" fill="none" stroke={c.ring} strokeWidth="1.5" className="animate-pulse-ring" />
+        <span
+          className="absolute w-8 h-8 rounded-full animate-pulse-ring"
+          style={{ backgroundColor: color, opacity: 0.25 }}
+        />
       )}
-      {/* Selection ring */}
-      {isSelected && (
-        <>
-          <circle r="16" fill="none" stroke={c.fill} strokeWidth="0.5" strokeDasharray="3 2" className="animate-sweep" style={{ transformOrigin: "center" }} />
-          <circle r="14" fill="none" stroke={c.fill} strokeWidth="1" opacity="0.5" />
-        </>
-      )}
-      {/* Marker shape */}
-      {isPerson ? (
-        <circle r="4" fill={c.fill} opacity="0.9" />
-      ) : (
-        <path d={markerShape(marker.type)} fill={c.fill} opacity="0.85" />
-      )}
-      {/* Center dot */}
-      <circle r="1.5" fill="#fff" opacity="0.9" />
-      {/* Label */}
-      {isSelected && (
-        <g>
-          <rect
-            x="10" y="-22" width={marker.label.length * 8 + 16} height="34"
-            rx="2" fill="rgba(10,14,26,0.92)" stroke={c.fill} strokeWidth="0.5"
-          />
-          <text x="18" y="-10" fill={c.fill} fontSize="8" fontFamily="var(--font-mono)">
-            {marker.label}
-          </text>
-          <text x="18" y="2" fill="#8892a8" fontSize="7" fontFamily="var(--font-mono)">
-            {marker.detail}
-          </text>
-        </g>
-      )}
-    </g>
+      <span
+        className="relative flex items-center justify-center w-6 h-6 rounded-full border-2"
+        style={{ backgroundColor: `${color}20`, borderColor: color }}
+      >
+        <Icon className="w-3 h-3" style={{ color }} />
+      </span>
+    </div>
   );
 }
 
+function MarkerPopupContent({ marker }: { marker: MapMarker }) {
+  const color = statusColor(marker.status);
+  return (
+    <div className="min-w-[200px] p-0 text-text-primary" style={{ fontFamily: "var(--font-display)" }}>
+      <div className="flex items-center gap-2 mb-1.5">
+        <span
+          className="readout text-[9px] uppercase px-1.5 py-0.5 rounded font-bold"
+          style={{ color, backgroundColor: `${color}15`, border: `1px solid ${color}40` }}
+        >
+          {marker.type === "facility" ? "施設" : marker.type === "vehicle" ? "車両" : marker.type === "alert" ? "検知" : "人員"}
+        </span>
+        <span
+          className="readout text-[9px] uppercase px-1.5 py-0.5 rounded"
+          style={{ color, backgroundColor: `${color}10` }}
+        >
+          {marker.status}
+        </span>
+      </div>
+      <div className="text-sm font-semibold mb-1" style={{ color: "#e8ecf4" }}>{marker.label}</div>
+      <div className="text-xs" style={{ color: "#8892a8" }}>{marker.detail}</div>
+      <div className="text-[10px] mt-1.5 pt-1.5 readout" style={{ color: "#4a5568", borderTop: "1px solid #1e293b" }}>
+        {marker.lat.toFixed(4)}, {marker.lng.toFixed(4)}
+      </div>
+    </div>
+  );
+}
+
+// Layer toggle types
+type LayerType = "facility" | "vehicle" | "alert" | "personnel";
+const LAYER_CONFIG: { key: LayerType; label: string; icon: typeof Warehouse }[] = [
+  { key: "facility", label: "施設", icon: Warehouse },
+  { key: "vehicle", label: "車両", icon: Truck },
+  { key: "alert", label: "検知", icon: AlertTriangle },
+  { key: "personnel", label: "人員", icon: User },
+];
+
 export default function TacticalMap({ onSelectMarker }: { onSelectMarker?: (id: string | null) => void }) {
-  const [selectedId, setSelectedId] = useState<string | null>("a1");
+  const [mounted, setMounted] = useState(false);
   const [timeValue, setTimeValue] = useState(100);
-  const [zoom] = useState(1);
+  const [layers, setLayers] = useState<Record<LayerType, boolean>>({
+    facility: true, vehicle: true, alert: true, personnel: true,
+  });
+  const [showLayerPanel, setShowLayerPanel] = useState(false);
 
-  useEffect(() => {
-    onSelectMarker?.(selectedId);
-  }, [selectedId, onSelectMarker]);
+  useEffect(() => { setMounted(true); }, []);
 
-  const handleClick = (id: string) => {
-    setSelectedId(prev => prev === id ? null : id);
+  const filteredMarkers = useMemo(
+    () => MAP_MARKERS.filter(m => layers[m.type]),
+    [layers]
+  );
+
+  const toggleLayer = (key: LayerType) => {
+    setLayers(prev => ({ ...prev, [key]: !prev[key] }));
+  };
+
+  // Create custom divIcon for each marker (leaflet needs this)
+  const createIcon = (marker: MapMarker) => {
+    if (typeof window === "undefined") return undefined;
+    const L = require("leaflet");
+    const color = statusColor(marker.status);
+    const isAlert = marker.status === "critical" || marker.status === "warning";
+    const typeChar = marker.type === "facility" ? "F" : marker.type === "vehicle" ? "V" : marker.type === "alert" ? "!" : "P";
+
+    return L.divIcon({
+      className: "custom-marker",
+      html: `
+        <div style="position:relative;display:flex;align-items:center;justify-content:center;">
+          ${isAlert ? `<span style="position:absolute;width:32px;height:32px;border-radius:50%;background:${color};opacity:0.2;animation:pulse-ring 2s ease-out infinite;"></span>` : ""}
+          <span style="position:relative;display:flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:50%;background:${color}20;border:2px solid ${color};font-family:var(--font-mono);font-size:10px;font-weight:bold;color:${color};">
+            ${typeChar}
+          </span>
+        </div>
+      `,
+      iconSize: [32, 32],
+      iconAnchor: [16, 16],
+      popupAnchor: [0, -16],
+    });
   };
 
   return (
     <div className="panel flex flex-col h-full">
       <div className="panel-header">
         共通状況図 (COP)
-        <span className="ml-auto flex items-center gap-1 text-alert-success text-[9px]">
-          <span className="w-1 h-1 rounded-full bg-alert-success animate-pulse-dot" />
-          LIVE
+        <span className="ml-auto flex items-center gap-3">
+          <span className="readout text-[9px] text-text-dim">
+            {filteredMarkers.length} マーカー
+          </span>
+          <span className="flex items-center gap-1 text-alert-success text-[9px]">
+            <span className="w-1.5 h-1.5 rounded-full bg-alert-success animate-pulse-dot" />
+            LIVE
+          </span>
         </span>
       </div>
 
-      {/* Map area */}
-      <div className="flex-1 relative overflow-hidden bg-bg-deep/50">
-        <svg
-          viewBox="0 0 720 480"
-          className="w-full h-full"
-          style={{ transform: `scale(${zoom})` }}
-        >
-          {/* Grid */}
-          <defs>
-            <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
-              <path d="M 40 0 L 0 0 0 40" fill="none" stroke="rgba(0,229,255,0.06)" strokeWidth="0.5" />
-            </pattern>
-            <pattern id="gridLarge" width="120" height="120" patternUnits="userSpaceOnUse">
-              <path d="M 120 0 L 0 0 0 120" fill="none" stroke="rgba(0,229,255,0.1)" strokeWidth="0.5" />
-            </pattern>
-            <radialGradient id="mapGlow" cx="50%" cy="50%" r="60%">
-              <stop offset="0%" stopColor="rgba(0,229,255,0.03)" />
-              <stop offset="100%" stopColor="transparent" />
-            </radialGradient>
-          </defs>
-
-          <rect width="720" height="480" fill="url(#mapGlow)" />
-          <rect width="720" height="480" fill="url(#grid)" />
-          <rect width="720" height="480" fill="url(#gridLarge)" />
-
-          {/* Japan outline (simplified) */}
-          <g opacity="0.15" stroke="rgba(0,229,255,0.6)" strokeWidth="1" fill="rgba(0,229,255,0.03)">
-            {/* Honshu main shape */}
-            <path d="M140,180 Q160,140 200,120 Q250,100 320,110 Q380,120 420,140 Q480,155 520,130 Q540,140 530,170 Q510,190 480,200 Q440,220 400,240 Q360,260 320,270 Q280,260 240,250 Q200,240 170,220 Q150,200 140,180 Z" />
-            {/* Hokkaido */}
-            <path d="M440,70 Q470,55 510,60 Q540,70 545,90 Q535,110 510,115 Q480,110 460,95 Q445,80 440,70 Z" />
-            {/* Kyushu */}
-            <path d="M130,260 Q150,245 175,250 Q190,265 185,285 Q170,300 150,295 Q135,280 130,260 Z" />
-            {/* Shikoku */}
-            <path d="M210,260 Q235,250 260,255 Q275,265 270,280 Q250,290 230,285 Q210,275 210,260 Z" />
-          </g>
-
-          {/* Connection lines between facilities */}
-          <g stroke="rgba(0,229,255,0.12)" strokeWidth="0.5" strokeDasharray="4 4">
-            <line x1={25*7.2} y1={30*4.8} x2={45*7.2} y2={55*4.8} />
-            <line x1={45*7.2} y1={55*4.8} x2={65*7.2} y2={25*4.8} />
-            <line x1={25*7.2} y1={30*4.8} x2={65*7.2} y2={25*4.8} />
-          </g>
-
-          {/* Vehicle routes */}
-          <g stroke="rgba(255,145,0,0.2)" strokeWidth="1" strokeDasharray="6 3" fill="none">
-            <path d={`M${35*7.2},${40*4.8} Q${30*7.2},${35*4.8} ${25*7.2},${30*4.8}`} />
-            <path d={`M${30*7.2},${50*4.8} Q${35*7.2},${45*4.8} ${25*7.2},${30*4.8}`} />
-          </g>
-
-          {/* Markers */}
-          {MAP_MARKERS.map(m => (
-            <MapMarkerSvg
-              key={m.id}
-              marker={m}
-              isSelected={selectedId === m.id}
-              onClick={() => handleClick(m.id)}
+      {/* Map */}
+      <div className="flex-1 relative overflow-hidden">
+        {mounted && (
+          <>
+            <link
+              rel="stylesheet"
+              href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
             />
-          ))}
+            <style>{`
+              .leaflet-container { background: #060a14; height: 100%; width: 100%; }
+              .leaflet-popup-content-wrapper { background: #0f1629; border: 1px solid rgba(0,229,255,0.2); border-radius: 4px; box-shadow: 0 0 20px rgba(0,229,255,0.1); }
+              .leaflet-popup-tip { background: #0f1629; border-right: 1px solid rgba(0,229,255,0.2); border-bottom: 1px solid rgba(0,229,255,0.2); }
+              .leaflet-popup-content { margin: 8px 10px; }
+              .leaflet-popup-close-button { color: #8892a8 !important; }
+              .leaflet-popup-close-button:hover { color: #00e5ff !important; }
+              .leaflet-control-zoom { border: 1px solid rgba(0,229,255,0.15) !important; }
+              .leaflet-control-zoom a { background: #0f1629 !important; color: #00e5ff !important; border-bottom: 1px solid rgba(0,229,255,0.1) !important; }
+              .leaflet-control-zoom a:hover { background: #151d33 !important; }
+              .leaflet-control-attribution { background: rgba(6,10,20,0.8) !important; color: #4a5568 !important; font-size: 9px !important; }
+              .leaflet-control-attribution a { color: #4a5568 !important; }
+              .custom-marker { background: transparent !important; border: none !important; }
+            `}</style>
+            <MapContainer
+              center={[36.5, 137.5] as [number, number]}
+              zoom={6}
+              zoomControl={true}
+              attributionControl={true}
+              style={{ height: "100%", width: "100%" }}
+            >
+              <TileLayer
+                attribution='&copy; <a href="https://carto.com/">CARTO</a>'
+                url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
+              />
 
-          {/* Compass */}
-          <g transform="translate(680,40)" opacity="0.4">
-            <circle r="16" fill="none" stroke="rgba(0,229,255,0.3)" strokeWidth="0.5" />
-            <line x1="0" y1="-12" x2="0" y2="-8" stroke="#00e5ff" strokeWidth="1" />
-            <text x="0" y="-18" fill="#00e5ff" fontSize="6" textAnchor="middle" fontFamily="var(--font-mono)">N</text>
-          </g>
+              {/* Vehicle routes */}
+              {VEHICLE_ROUTES.filter(r => layers.vehicle).map(route => (
+                <Polyline
+                  key={route.vehicleId}
+                  positions={route.points as [number, number][]}
+                  pathOptions={{
+                    color: statusColor(route.status),
+                    weight: 2,
+                    opacity: 0.5,
+                    dashArray: route.status === "normal" ? undefined : "8 6",
+                  }}
+                />
+              ))}
 
-          {/* Scale bar */}
-          <g transform="translate(30,455)" opacity="0.4">
-            <line x1="0" y1="0" x2="80" y2="0" stroke="#00e5ff" strokeWidth="0.5" />
-            <line x1="0" y1="-3" x2="0" y2="3" stroke="#00e5ff" strokeWidth="0.5" />
-            <line x1="80" y1="-3" x2="80" y2="3" stroke="#00e5ff" strokeWidth="0.5" />
-            <text x="40" y="10" fill="#00e5ff" fontSize="6" textAnchor="middle" fontFamily="var(--font-mono)">200km</text>
-          </g>
-        </svg>
+              {/* Markers */}
+              {filteredMarkers.map(m => (
+                <Marker
+                  key={m.id}
+                  position={[m.lat, m.lng] as [number, number]}
+                  icon={createIcon(m)}
+                  eventHandlers={{
+                    click: () => onSelectMarker?.(m.id),
+                  }}
+                >
+                  <Popup>
+                    <MarkerPopupContent marker={m} />
+                  </Popup>
+                </Marker>
+              ))}
 
-        {/* Map controls overlay */}
-        <div className="absolute top-2 right-2 flex flex-col gap-1">
-          <button className="btn-tactical p-1.5"><ZoomIn className="w-3.5 h-3.5" /></button>
-          <button className="btn-tactical p-1.5"><ZoomOut className="w-3.5 h-3.5" /></button>
-          <button className="btn-tactical p-1.5"><Crosshair className="w-3.5 h-3.5" /></button>
-          <button className="btn-tactical p-1.5"><Layers className="w-3.5 h-3.5" /></button>
+              {/* Pulse circles for critical items */}
+              {filteredMarkers
+                .filter(m => m.status === "critical")
+                .map(m => (
+                  <CircleMarker
+                    key={`ring-${m.id}`}
+                    center={[m.lat, m.lng] as [number, number]}
+                    radius={20}
+                    pathOptions={{
+                      color: statusColor(m.status),
+                      weight: 1,
+                      opacity: 0.15,
+                      fillOpacity: 0.05,
+                      fillColor: statusColor(m.status),
+                    }}
+                  />
+                ))}
+            </MapContainer>
+          </>
+        )}
+
+        {/* Layer toggle panel */}
+        <div className="absolute top-2 right-2 z-[1000] flex flex-col gap-1">
+          <button
+            className={`btn-tactical p-1.5 ${showLayerPanel ? "glow-cyan" : ""}`}
+            onClick={() => setShowLayerPanel(p => !p)}
+          >
+            <Layers className="w-3.5 h-3.5" />
+          </button>
+          <button
+            className="btn-tactical p-1.5"
+            onClick={() => {
+              if (typeof window !== "undefined") {
+                // Reset map view
+              }
+            }}
+          >
+            <Crosshair className="w-3.5 h-3.5" />
+          </button>
         </div>
 
-        {/* Legend */}
-        <div className="absolute bottom-10 right-2 text-[8px] readout text-text-dim space-y-1 bg-bg-deep/70 p-2 rounded border border-border-subtle">
-          <div className="flex items-center gap-1.5"><span className="w-2 h-2 bg-alert-critical inline-block" /> 施設</div>
-          <div className="flex items-center gap-1.5"><span className="w-0 h-0 border-l-[4px] border-r-[4px] border-b-[6px] border-l-transparent border-r-transparent border-b-alert-success inline-block" /> 車両</div>
-          <div className="flex items-center gap-1.5"><span className="w-2 h-2 bg-accent-cyan rotate-45 inline-block" /> 検知</div>
-          <div className="flex items-center gap-1.5"><span className="w-2 h-2 bg-alert-success rounded-full inline-block" /> 人員</div>
+        {/* Layer panel */}
+        {showLayerPanel && (
+          <div className="absolute top-2 right-12 z-[1000] bg-bg-surface/95 border border-border-active rounded p-2 space-y-1 backdrop-blur-sm animate-slide-up">
+            <div className="readout text-[9px] text-text-dim uppercase tracking-wider px-1 pb-1 border-b border-border-subtle mb-1">
+              レイヤー
+            </div>
+            {LAYER_CONFIG.map(cfg => {
+              const Icon = cfg.icon;
+              return (
+                <button
+                  key={cfg.key}
+                  className={`flex items-center gap-2 w-full px-2 py-1 rounded text-[10px] readout transition-colors ${
+                    layers[cfg.key]
+                      ? "text-accent-cyan bg-accent-cyan/8"
+                      : "text-text-dim hover:text-text-secondary"
+                  }`}
+                  onClick={() => toggleLayer(cfg.key)}
+                >
+                  <Icon className="w-3 h-3" />
+                  {cfg.label}
+                  <span className={`ml-auto w-1.5 h-1.5 rounded-full ${layers[cfg.key] ? "bg-accent-cyan" : "bg-text-dim"}`} />
+                </button>
+              );
+            })}
+          </div>
+        )}
+
+        {/* Marker count badges */}
+        <div className="absolute bottom-2 left-2 z-[1000] flex items-center gap-2">
+          {LAYER_CONFIG.map(cfg => {
+            const count = MAP_MARKERS.filter(m => m.type === cfg.key).length;
+            const critCount = MAP_MARKERS.filter(m => m.type === cfg.key && m.status === "critical").length;
+            const Icon = cfg.icon;
+            return (
+              <div
+                key={cfg.key}
+                className={`flex items-center gap-1 readout text-[9px] px-2 py-1 rounded bg-bg-deep/80 border border-border-subtle ${
+                  layers[cfg.key] ? "text-text-secondary" : "text-text-dim opacity-50"
+                }`}
+              >
+                <Icon className="w-3 h-3" />
+                <span>{count}</span>
+                {critCount > 0 && (
+                  <span className="text-alert-critical font-bold">({critCount})</span>
+                )}
+              </div>
+            );
+          })}
         </div>
       </div>
 
       {/* Timeline slider */}
-      <div className="px-3 py-2 border-t border-border-subtle flex items-center gap-3">
+      <div className="px-3 py-2 border-t border-border-subtle flex items-center gap-3 shrink-0">
         <Clock className="w-3.5 h-3.5 text-accent-cyan-dim shrink-0" />
         <span className="readout text-[10px] text-text-dim w-12">12:00</span>
         <input
@@ -202,7 +332,7 @@ export default function TacticalMap({ onSelectMarker }: { onSelectMarker?: (id: 
           max={100}
           value={timeValue}
           onChange={e => setTimeValue(Number(e.target.value))}
-          className="flex-1 h-1 appearance-none bg-bg-elevated rounded cursor-pointer accent-accent-cyan [&::-webkit-slider-thumb]:w-2 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:bg-accent-cyan [&::-webkit-slider-thumb]:rounded-sm"
+          className="flex-1 h-1 appearance-none bg-bg-elevated rounded cursor-pointer [&::-webkit-slider-thumb]:w-2.5 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:bg-accent-cyan [&::-webkit-slider-thumb]:rounded-sm [&::-webkit-slider-thumb]:cursor-pointer"
         />
         <span className="readout text-[10px] text-accent-cyan w-12 text-right">
           {timeValue === 100 ? "LIVE" : `${Math.floor(12 + timeValue * 0.024)}:${String(Math.floor((timeValue * 1.44) % 60)).padStart(2, "0")}`}

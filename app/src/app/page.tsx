@@ -16,31 +16,30 @@ export default function Dashboard() {
   }, []);
 
   return (
-    <div className="h-screen flex flex-col overflow-hidden">
-      {/* Top: Status Header */}
+    <div className="h-screen flex flex-col overflow-hidden bg-bg-deep">
       <StatusHeader />
 
-      {/* KPI Bar */}
-      <div className="border-b border-border-subtle bg-bg-deep/60 px-3 py-1 shrink-0">
-        <HudKpi />
-      </div>
-
-      {/* Main Content: 3-column layout */}
-      <div className="flex-1 flex overflow-hidden">
-        {/* Left: Tactical Map + Workflow */}
-        <div className="flex-[2] flex flex-col border-r border-border-subtle min-w-0">
-          <div className="flex-[3] min-h-0">
-            <TacticalMap onSelectMarker={handleSelectMarker} />
+      {/* Main workspace — map dominant, side panel secondary */}
+      <div className="flex-1 flex overflow-hidden min-h-0">
+        {/* Left: Map + KPI */}
+        <div className="flex-1 flex flex-col min-w-0">
+          {/* KPI strip */}
+          <div className="border-b border-border-subtle bg-bg-primary/60 px-5 py-2 shrink-0">
+            <HudKpi />
           </div>
-          <div className="flex-[2] border-t border-border-subtle min-h-0">
-            <WorkflowKanban />
+          {/* Map — takes all remaining space */}
+          <div className="flex-1 min-h-0">
+            <TacticalMap onSelectMarker={handleSelectMarker} />
           </div>
         </div>
 
-        {/* Right: Triage + Chat */}
-        <div className="flex-[1] flex flex-col min-w-[320px] max-w-[420px]">
+        {/* Right sidebar — narrow */}
+        <div className="w-[380px] shrink-0 flex flex-col border-l border-border-subtle">
           <div className="flex-[3] border-b border-border-subtle min-h-0 overflow-hidden">
             <AiTriage onSelectMarker={handleSelectMarker} />
+          </div>
+          <div className="flex-[2] border-b border-border-subtle min-h-0 overflow-hidden">
+            <WorkflowKanban />
           </div>
           <div className="flex-[2] min-h-0 overflow-hidden">
             <ChatInterface />
@@ -48,16 +47,17 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* Bottom status line */}
-      <div className="h-6 border-t border-border-subtle bg-bg-deep/80 flex items-center px-4 justify-between shrink-0">
-        <div className="readout text-[9px] text-text-dim flex items-center gap-4">
-          <span>データソース: <span className="text-alert-success">12/12 接続</span></span>
-          <span>最終同期: <span className="text-accent-cyan">2秒前</span></span>
-          <span>AIモデル: <span className="text-accent-purple">MAVEN-LLM v3.2</span></span>
+      {/* Status bar */}
+      <div className="h-7 border-t border-border-subtle bg-bg-primary/80 backdrop-blur-sm flex items-center px-5 justify-between shrink-0">
+        <div className="readout text-[10px] text-text-dim flex items-center gap-5">
+          <span className="flex items-center gap-1.5">
+            <span className="w-1.5 h-1.5 rounded-full bg-alert-success" />
+            データソース <span className="text-text-secondary">12/12</span>
+          </span>
+          <span>最終同期 <span className="text-accent-cyan">2秒前</span></span>
         </div>
-        <div className="readout text-[9px] text-text-dim flex items-center gap-4">
-          <span>オペレーター: <span className="text-text-primary">田中太郎</span></span>
-          <span>セッション: <span className="text-accent-cyan">04h 23m</span></span>
+        <div className="readout text-[10px] text-text-dim flex items-center gap-5">
+          <span>田中太郎</span>
         </div>
       </div>
     </div>
