@@ -12,6 +12,7 @@ import ChatInterface from "@/components/ChatInterface";
 import GameOverlay from "@/components/GameOverlay";
 import GameControls from "@/components/GameControls";
 import ResizeHandle from "@/components/ResizeHandle";
+import { WAVE_CONFIGS } from "@/lib/scenarios";
 import type {
   GameEvent,
   GameUnit,
@@ -231,25 +232,27 @@ export default function Dashboard() {
   const handleResume = useCallback(() => dispatch({ type: "RESUME" }), [dispatch]);
   const handleStart = useCallback(() => dispatch({ type: "START_GAME" }), [dispatch]);
   const handleRestart = useCallback(() => dispatch({ type: "START_GAME" }), [dispatch]);
+  const [dispatchError, setDispatchError] = useState<string | null>(null);
   const handleDispatch = useCallback((eventId: string) => {
-    // Dispatch first idle player unit to this event
-    const idleUnit = state.playerUnits.find((u) => u.status === "idle");
-    if (idleUnit) {
-      dispatch({ type: "DISPATCH_UNIT", unitId: idleUnit.id, eventId });
+    const mobileUnits = state.playerUnits.filter(u => u.speed > 0);
+    const idleUnit = mobileUnits.find(u => u.status === "idle");
+    if (!idleUnit) {
+      setDispatchError("待機中の機動部隊がありません");
+      setTimeout(() => setDispatchError(null), 2500);
+      return;
     }
+    setDispatchError(null);
+    dispatch({ type: "DISPATCH_UNIT", unitId: idleUnit.id, eventId });
   }, [dispatch, state.playerUnits]);
   const handleAdvanceMission = useCallback((id: string) => {
     dispatch({ type: "APPROVE_MISSION", missionId: id });
   }, [dispatch]);
 
-  // Wave config for overlay
   const waveConfig = useMemo(() => {
-    // The game engine should provide this; for now we derive a simple one
-    return {
-      name: `第${state.wave}波`,
-      description: "新たな脅威が接近中。防衛線を維持せよ。",
-      briefing: `Wave ${state.wave} 開始。全部隊に警戒態勢を命ずる。\n敵の動向を監視し、適切なタイミングで部隊を派遣せよ。`,
-    };
+    const cfg = WAVE_CONFIGS[state.wave - 1];
+    return cfg
+      ? { name: cfg.name, description: cfg.description, briefing: cfg.briefing }
+      : { name: `第${state.wave}波`, description: "作戦準備中", briefing: "待機せよ。" };
   }, [state.wave]);
 
   return (
@@ -311,6 +314,13 @@ export default function Dashboard() {
               <span>MAVEN COMMAND v1.0</span>
             </div>
           </div>
+
+          {/* Dispatch error toast */}
+          {dispatchError && (
+            <div className="fixed bottom-12 left-1/2 -translate-x-1/2 z-[2000] readout text-xs bg-alert-critical/90 text-white px-4 py-2 rounded-md animate-slide-up">
+              {dispatchError}
+            </div>
+          )}
 
           {/* Game overlay for briefing / victory / defeat */}
           <GameOverlay
