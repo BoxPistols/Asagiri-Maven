@@ -249,8 +249,8 @@ function gameReducer(state: GameState, action: GameAction): GameState {
     case "START_GAME": {
       const initial = createInitialGameState();
       const waveConfig = getWaveConfig(1);
-      // Spawn only initial 2 enemies — more will come as reinforcements
-      const initialCount = Math.min(2, waveConfig.spawnUnits.length);
+      // Initial spawn: 3 enemies — reinforcements come each turn
+      const initialCount = Math.min(3, waveConfig.spawnUnits.length);
       const spawnedEnemies: GameUnit[] = waveConfig.spawnUnits.slice(0, initialCount).map((tmpl, i) => ({
         ...tmpl,
         id: `enemy-w1-${i}-${uid().slice(0, 6)}`,

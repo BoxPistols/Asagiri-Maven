@@ -16,10 +16,10 @@ export interface UnitTemplate {
 export const SCOUT_DRONE: UnitTemplate = {
   type: "drone",
   namePrefix: "偵察ドローン",
-  hp: 20,
-  attack: 10,
-  defense: 10,
-  speed: 1.0,
+  hp: 30,
+  attack: 15,
+  defense: 12,
+  speed: 1.3,
   description: "高速偵察。対歩兵有利、対艦不利",
 };
 
@@ -27,10 +27,10 @@ export const SCOUT_DRONE: UnitTemplate = {
 export const COMBAT_DRONE: UnitTemplate = {
   type: "drone",
   namePrefix: "攻撃ドローン",
-  hp: 35,
-  attack: 20,
-  defense: 15,
-  speed: 0.7,
+  hp: 45,
+  attack: 25,
+  defense: 18,
+  speed: 1.0,
   description: "攻撃型無人機。対歩兵有利、対艦不利",
 };
 

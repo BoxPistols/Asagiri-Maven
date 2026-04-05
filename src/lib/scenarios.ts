@@ -55,10 +55,13 @@ const wave1: WaveConfig = {
     "偵察ドローンの制御信号を傍受。発信源は東方海域の艦艇と推定。",
   ],
   spawnUnits: [
-    // Drone approaching Tokyo Bay from the east Pacific
+    // Multiple drones approaching from different directions
     enemy(SCOUT_DRONE, 1, 35.35, 140.50, "東京湾東方を低速接近中"),
-    // Drone approaching Fukuoka from the west (East China Sea)
     enemy(SCOUT_DRONE, 2, 33.60, 129.50, "福岡西方海上を飛行中"),
+    enemy(SCOUT_DRONE, 3, 34.20, 136.90, "伊勢湾南方から接近中"),
+    enemy(COMBAT_DRONE, 4, 35.00, 140.90, "房総沖を低空侵攻中"),
+    enemy(COMBAT_DRONE, 5, 33.30, 130.00, "対馬海峡方面から接近"),
+    enemy(SCOUT_DRONE, 6, 34.50, 139.80, "伊豆諸島方面を偵察中"),
   ],
   events: [
     {
