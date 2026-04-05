@@ -817,10 +817,8 @@ body::after {
   opacity: 0.55;
 }
 
-/* Smooth marker movement via Leaflet transform */
-.leaflet-marker-icon.unit-animated {
-  transition: transform 0.6s ease-in-out !important;
-}
+/* Marker movement is handled by Leaflet's slideTo, not CSS transitions
+   (CSS transitions interfere with Leaflet's zoom/pan transform updates) */
 
 /* Attack line animation — dashing projectile */
 @keyframes attack-line-dash {

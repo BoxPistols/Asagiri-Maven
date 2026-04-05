@@ -219,7 +219,7 @@ export default function TacticalMap({
           if (typeof markerRef.slideTo === "function") {
             markerRef.slideTo(curr, { duration: 600 });
           } else if (typeof markerRef.setLatLng === "function") {
-            // CSS transition on .unit-animated class handles the smooth move
+            // CSS transition on . class handles the smooth move
             markerRef.setLatLng(curr);
           }
         }
@@ -354,7 +354,7 @@ export default function TacticalMap({
     const actedClass = acted ? " unit-marker-acted" : "";
 
     return L.divIcon({
-      className: `custom-marker unit-marker unit-marker-player unit-animated${actedClass}`,
+      className: `custom-marker unit-marker unit-marker-player ${actedClass}`,
       html: svg,
       iconSize: [40, 44],
       iconAnchor: [20, 22],
@@ -373,7 +373,7 @@ export default function TacticalMap({
     const targetCursorClass = targetingMode ? " cursor-crosshair" : "";
 
     return L.divIcon({
-      className: `custom-marker unit-marker unit-marker-enemy unit-animated${targetCursorClass}`,
+      className: `custom-marker unit-marker unit-marker-enemy ${targetCursorClass}`,
       html: svg,
       iconSize: [40, 44],
       iconAnchor: [20, 22],
