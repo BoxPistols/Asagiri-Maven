@@ -140,6 +140,7 @@ interface TacticalMapProps {
   combatLog?: GameLogEntry[];
   currentTurn?: number;
   focusTarget?: { lat: number; lng: number; key: string } | null;
+  tooltipAutoCloseMs?: number; // 0 = manual mode
   children?: React.ReactNode;
 }
 
@@ -161,6 +162,7 @@ export default function TacticalMap({
   combatLog,
   currentTurn,
   focusTarget,
+  tooltipAutoCloseMs = 2500,
   children,
 }: TacticalMapProps) {
   const { theme } = useTheme();

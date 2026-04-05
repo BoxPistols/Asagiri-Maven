@@ -1,6 +1,7 @@
 "use client";
 
-import { CheckCircle2, ChevronRight, Swords, Navigation, Truck, Ship, User } from "lucide-react";
+import { useState } from "react";
+import { CheckCircle2, ChevronRight, Swords, Navigation, Truck, Ship, User, ChevronDown, ChevronUp } from "lucide-react";
 import type { GameUnit } from "@/lib/game-types";
 
 interface UnactedUnitsPanelProps {
@@ -24,6 +25,7 @@ export default function UnactedUnitsPanel({
   selectedId,
   onSelectUnit,
 }: UnactedUnitsPanelProps) {
+  const [open, setOpen] = useState(true);
   // Filter only mobile (acting-capable) units
   const mobile = units.filter(u =>
     u.status !== "destroyed"
@@ -36,12 +38,16 @@ export default function UnactedUnitsPanel({
   const progressPct = total > 0 ? (actedCount / total) * 100 : 0;
 
   return (
-    <div className="absolute top-20 right-3 z-[950] w-56 bg-bg-surface/95 backdrop-blur-md border border-border-active rounded-lg overflow-hidden shadow-xl pointer-events-auto">
-      {/* Header */}
-      <div className="px-3 py-2 border-b border-border-subtle bg-bg-primary/40">
+    <div className="w-full bg-bg-surface/95 backdrop-blur-md border border-border-active rounded-lg overflow-hidden shadow-xl pointer-events-auto">
+      {/* Header - clickable to collapse */}
+      <button
+        onClick={() => setOpen(o => !o)}
+        className="w-full px-3 py-2 border-b border-border-subtle bg-bg-primary/40 hover:bg-bg-elevated/30 transition-colors"
+      >
         <div className="flex items-center justify-between mb-1.5">
-          <span className="readout text-xs text-accent-cyan uppercase tracking-wider font-bold">
+          <span className="readout text-xs text-accent-cyan uppercase tracking-wider font-bold flex items-center gap-1.5">
             行動状況
+            {open ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
           </span>
           <span className="readout text-xs text-text-secondary">
             <span className="text-accent-cyan font-bold">{actedCount}</span>
@@ -54,10 +60,12 @@ export default function UnactedUnitsPanel({
             style={{ width: `${progressPct}%` }}
           />
         </div>
-      </div>
+      </button>
 
+      {open && (
+      <>
       {/* Unit list */}
-      <div className="max-h-[40vh] overflow-y-auto">
+      <div className="max-h-[32vh] overflow-y-auto">
         {unacted.length > 0 ? (
           unacted.map(unit => {
             const Icon = typeIcon(unit.type);
@@ -104,6 +112,8 @@ export default function UnactedUnitsPanel({
             <span>部隊名をクリックで選択</span>
           </div>
         </div>
+      )}
+      </>
       )}
     </div>
   );

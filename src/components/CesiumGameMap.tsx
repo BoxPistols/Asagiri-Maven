@@ -79,7 +79,11 @@ function getCachedBillboard(
 
 type ViewerType = {
   scene: {
-    globe: { enableLighting: boolean; depthTestAgainstTerrain: boolean };
+    globe: {
+      enableLighting: boolean;
+      depthTestAgainstTerrain: boolean;
+      terrainExaggeration?: number;
+    };
     skyAtmosphere: { show: boolean };
     primitives: { add: (tileset: unknown) => unknown };
     canvas: HTMLCanvasElement;
@@ -96,6 +100,7 @@ type ViewerType = {
     getById: (id: string) => unknown;
     values: unknown[];
   };
+  clock?: { currentTime: unknown };
   screenSpaceEventHandler: unknown;
   destroy: () => void;
 };

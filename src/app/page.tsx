@@ -711,32 +711,28 @@ export default function Dashboard() {
               />
             )}
 
-            {/* Mission objectives panel - always visible during play */}
-            {isPlaying && (
-              <MissionObjectives
-                state={state}
-                waveName={waveConfig?.name ?? ""}
-              />
-            )}
-
-            {/* Map legend (collapsible) */}
+            {/* Map legend (collapsible, bottom-left) */}
             {isPlaying && <MapLegend />}
 
-            {/* MAVEN AI Assistant — situation analysis & action suggestions */}
+            {/* Unified right sidebar: stacked collapsible panels */}
             {isPlaying && (
-              <MavenAiAssistant
-                state={state}
-                onSelectUnit={selectAndFocus}
-              />
-            )}
-
-            {/* Unacted units panel — always visible during player phase */}
-            {isPlaying && state.turnPhase === "player" && (
-              <UnactedUnitsPanel
-                units={state.playerUnits}
-                selectedId={selectedUnit?.id ?? null}
-                onSelectUnit={selectAndFocus}
-              />
+              <div className="absolute top-20 right-3 z-[950] w-64 flex flex-col gap-2 max-h-[calc(100vh-180px)] overflow-y-auto pr-0.5 pointer-events-none [&>*]:pointer-events-auto">
+                {state.turnPhase === "player" && (
+                  <UnactedUnitsPanel
+                    units={state.playerUnits}
+                    selectedId={selectedUnit?.id ?? null}
+                    onSelectUnit={selectAndFocus}
+                  />
+                )}
+                <MissionObjectives
+                  state={state}
+                  waveName={waveConfig?.name ?? ""}
+                />
+                <MavenAiAssistant
+                  state={state}
+                  onSelectUnit={selectAndFocus}
+                />
+              </div>
             )}
 
             {/* Action launcher popup when a unit is selected */}
