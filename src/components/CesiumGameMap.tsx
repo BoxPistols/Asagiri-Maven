@@ -143,6 +143,9 @@ export default function CesiumGameMap({
   const [loading, setLoading] = useState(true);
   const [loadedCities, setLoadedCities] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const [lighting, setLighting] = useState<"day" | "night" | "auto">("auto");
+  const [terrainExag, setTerrainExag] = useState<number>(1);
+  const [sceneOpen, setSceneOpen] = useState(false);
 
   // Initialize viewer
   useEffect(() => {
@@ -392,6 +395,41 @@ export default function CesiumGameMap({
     };
   }, [attackTrajectories]);
 
+  // Apply lighting mode
+  useEffect(() => {
+    const viewer = viewerRef.current;
+    const Cesium = cesiumRef.current;
+    if (!viewer || !Cesium) return;
+    const globe = viewer.scene.globe as unknown as { enableLighting: boolean };
+    const clock = viewer.clock as unknown as { currentTime?: unknown; shouldAnimate?: boolean } | undefined;
+    if (lighting === "auto") {
+      globe.enableLighting = true;
+      if (clock) clock.shouldAnimate = false;
+    } else if (lighting === "day") {
+      // Set time to noon JST (UTC 03:00)
+      const now = new Date();
+      now.setUTCHours(3, 0, 0, 0);
+      if (clock) clock.currentTime = Cesium.JulianDate.fromDate(now);
+      globe.enableLighting = true;
+      if (clock) clock.shouldAnimate = false;
+    } else if (lighting === "night") {
+      // Set time to midnight JST (UTC 15:00)
+      const now = new Date();
+      now.setUTCHours(15, 0, 0, 0);
+      if (clock) clock.currentTime = Cesium.JulianDate.fromDate(now);
+      globe.enableLighting = true;
+      if (clock) clock.shouldAnimate = false;
+    }
+  }, [lighting]);
+
+  // Apply terrain exaggeration
+  useEffect(() => {
+    const viewer = viewerRef.current;
+    if (!viewer) return;
+    const globe = viewer.scene.globe as unknown as { terrainExaggeration?: number };
+    globe.terrainExaggeration = terrainExag;
+  }, [terrainExag]);
+
   // Fly to focus target
   useEffect(() => {
     if (!focusTarget) return;
@@ -459,22 +497,81 @@ export default function CesiumGameMap({
             <div className="absolute inset-0 pointer-events-none z-[800] bg-gradient-to-br from-transparent via-transparent to-alert-critical/20 animate-pulse" />
           )}
 
-          {/* Camera presets */}
-          <div className="absolute top-16 right-3 bg-bg-surface/95 backdrop-blur-md border border-border-subtle rounded-lg overflow-hidden z-[900]">
-            <div className="px-3 py-1.5 border-b border-border-subtle">
-              <div className="readout text-xs text-accent-cyan uppercase tracking-wider">{CESIUM_UI.CAMERA_COMPACT}</div>
-            </div>
-            <div className="p-1 space-y-0.5">
-              {CAMERA_PRESETS.map(preset => (
-                <button
-                  key={preset.id}
-                  onClick={() => flyToPreset(preset)}
-                  className="w-full text-left px-2.5 py-1 rounded text-xs text-text-secondary hover:bg-accent-cyan/10 hover:text-accent-cyan transition-colors"
-                >
-                  {preset.name}
-                </button>
-              ))}
-            </div>
+          {/* Scene controls + camera presets — top-left collapsible panel */}
+          <div className="absolute top-16 left-3 bg-bg-surface/95 backdrop-blur-md border border-border-subtle rounded-lg overflow-hidden z-[900] w-48">
+            <button
+              onClick={() => setSceneOpen(o => !o)}
+              className="w-full px-3 py-1.5 border-b border-border-subtle hover:bg-bg-elevated/30 transition-colors flex items-center justify-between"
+            >
+              <span className="readout text-xs text-accent-cyan uppercase tracking-wider">3Dコントロール</span>
+              <span className="text-text-dim text-xs">{sceneOpen ? "▲" : "▼"}</span>
+            </button>
+            {sceneOpen && (
+              <div className="p-2 space-y-3">
+                {/* Camera presets */}
+                <div>
+                  <div className="readout text-xs text-text-dim uppercase tracking-wider mb-1 px-1">
+                    {CESIUM_UI.CAMERA_COMPACT}
+                  </div>
+                  <div className="space-y-0.5">
+                    {CAMERA_PRESETS.map(preset => (
+                      <button
+                        key={preset.id}
+                        onClick={() => flyToPreset(preset)}
+                        className="w-full text-left px-2.5 py-1 rounded text-xs text-text-secondary hover:bg-accent-cyan/10 hover:text-accent-cyan transition-colors"
+                      >
+                        {preset.name}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Lighting */}
+                <div>
+                  <div className="readout text-xs text-text-dim uppercase tracking-wider mb-1 px-1">
+                    時刻
+                  </div>
+                  <div className="flex gap-0.5">
+                    {([
+                      { key: "auto", label: "現在" },
+                      { key: "day", label: "昼" },
+                      { key: "night", label: "夜" },
+                    ] as const).map(opt => (
+                      <button
+                        key={opt.key}
+                        onClick={() => setLighting(opt.key)}
+                        className={`flex-1 px-1.5 py-1 rounded text-xs transition-colors ${
+                          lighting === opt.key
+                            ? "bg-accent-cyan/15 text-accent-cyan"
+                            : "text-text-dim hover:text-text-secondary hover:bg-bg-elevated/40"
+                        }`}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Terrain exaggeration */}
+                <div>
+                  <div className="flex items-center justify-between mb-1 px-1">
+                    <span className="readout text-xs text-text-dim uppercase tracking-wider">
+                      地形誇張
+                    </span>
+                    <span className="readout text-xs text-accent-cyan">×{terrainExag.toFixed(1)}</span>
+                  </div>
+                  <input
+                    type="range"
+                    min={1}
+                    max={5}
+                    step={0.5}
+                    value={terrainExag}
+                    onChange={e => setTerrainExag(Number(e.target.value))}
+                    className="w-full h-1 appearance-none bg-bg-elevated rounded cursor-pointer [&::-webkit-slider-thumb]:w-2.5 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:bg-accent-cyan [&::-webkit-slider-thumb]:rounded-sm"
+                  />
+                </div>
+              </div>
+            )}
           </div>
         </>
       )}
