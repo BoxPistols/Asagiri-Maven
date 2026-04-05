@@ -1,9 +1,15 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import { Bot, AlertTriangle, Target, Package, Lightbulb, Activity, ChevronDown, ChevronUp, Sparkles } from "lucide-react";
+import { Bot, AlertTriangle, Target, Package, Lightbulb, Activity, ChevronDown, ChevronUp, Sparkles, Send, MessageSquare } from "lucide-react";
 import type { GameState, GameUnit } from "@/lib/game-types";
-import { analyzeSituation, getSituationSummary, type AdvisorMessage } from "@/lib/ai-advisor";
+import { analyzeSituation, getSituationSummary, answerQuery, type AdvisorMessage } from "@/lib/ai-advisor";
+
+interface ChatMsg {
+  id: string;
+  role: "user" | "ai";
+  text: string;
+}
 
 interface MavenAiAssistantProps {
   state: GameState;
@@ -32,9 +38,22 @@ function priorityStyle(priority: AdvisorMessage["priority"]) {
 
 export default function MavenAiAssistant({ state, onSelectUnit }: MavenAiAssistantProps) {
   const [open, setOpen] = useState(true);
+  const [chatOpen, setChatOpen] = useState(false);
+  const [input, setInput] = useState("");
+  const [chat, setChat] = useState<ChatMsg[]>([]);
   const messages = useMemo(() => analyzeSituation(state), [state]);
   const summary = useMemo(() => getSituationSummary(state), [state]);
   const topMsg = messages[0];
+
+  const handleSend = (text: string) => {
+    if (!text.trim()) return;
+    const userMsg: ChatMsg = { id: `u-${Date.now()}`, role: "user", text: text.trim() };
+    const aiMsg: ChatMsg = { id: `a-${Date.now()}`, role: "ai", text: answerQuery(state, text.trim()) };
+    setChat(prev => [...prev, userMsg, aiMsg].slice(-10));
+    setInput("");
+  };
+
+  const SUGGESTED = ["脅威は?", "残り何体?", "補給状況は?", "どうすれば?"];
 
   return (
     <div className="absolute top-[340px] right-3 z-[950] w-64 bg-bg-surface/95 backdrop-blur-md border border-accent-purple/30 rounded-lg overflow-hidden shadow-xl pointer-events-auto">
@@ -115,12 +134,73 @@ export default function MavenAiAssistant({ state, onSelectUnit }: MavenAiAssista
           </div>
 
           {/* Footer */}
-          <div className="px-3 py-1.5 border-t border-border-subtle bg-bg-primary/30">
-            <div className="flex items-center gap-1.5 text-xs text-text-dim">
-              <Bot className="w-3 h-3" />
-              <span>クリックで対象ユニット選択</span>
+          {/* Chat toggle */}
+          <button
+            onClick={() => setChatOpen(o => !o)}
+            className="w-full flex items-center justify-between px-3 py-1.5 border-t border-border-subtle bg-bg-primary/30 hover:bg-bg-elevated/40 transition-colors"
+          >
+            <div className="flex items-center gap-1.5 text-xs text-accent-purple">
+              <MessageSquare className="w-3 h-3" />
+              <span className="font-medium">AIに質問する</span>
             </div>
-          </div>
+            {chatOpen ? <ChevronUp className="w-3 h-3 text-text-dim" /> : <ChevronDown className="w-3 h-3 text-text-dim" />}
+          </button>
+
+          {/* Chat interface */}
+          {chatOpen && (
+            <div className="border-t border-border-subtle">
+              {/* Chat messages */}
+              {chat.length > 0 && (
+                <div className="max-h-32 overflow-y-auto px-3 py-2 space-y-2 bg-bg-deep/30">
+                  {chat.map(m => (
+                    <div key={m.id} className={`text-xs ${m.role === "user" ? "text-accent-cyan" : "text-text-secondary"}`}>
+                      <div className="readout text-xs opacity-60 mb-0.5">
+                        {m.role === "user" ? "あなた" : "MAVEN AI"}
+                      </div>
+                      <div className="whitespace-pre-wrap leading-relaxed">{m.text}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Suggested queries */}
+              <div className="px-2 py-1.5 flex flex-wrap gap-1 border-t border-border-subtle">
+                {SUGGESTED.map(q => (
+                  <button
+                    key={q}
+                    onClick={() => handleSend(q)}
+                    className="readout text-xs px-2 py-1 rounded border border-accent-purple/30 text-accent-purple hover:bg-accent-purple/10 transition-colors"
+                  >
+                    {q}
+                  </button>
+                ))}
+              </div>
+
+              {/* Input */}
+              <div className="px-2 pb-2 pt-1 flex gap-1">
+                <input
+                  type="text"
+                  value={input}
+                  onChange={e => setInput(e.target.value)}
+                  onKeyDown={e => {
+                    if (e.key === "Enter" && !e.nativeEvent.isComposing) {
+                      handleSend(input);
+                    }
+                  }}
+                  placeholder="状況を質問..."
+                  className="flex-1 bg-bg-deep/80 border border-border-subtle rounded px-2 py-1 text-xs text-text-primary placeholder-text-dim outline-none focus:border-accent-purple/40"
+                  style={{ fontSize: "16px" }}
+                />
+                <button
+                  onClick={() => handleSend(input)}
+                  className="p-1 text-accent-purple hover:text-accent-purple/80 transition"
+                  aria-label="送信"
+                >
+                  <Send className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          )}
         </>
       )}
     </div>
