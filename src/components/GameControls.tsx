@@ -103,21 +103,23 @@ export default function GameControls({
             </button>
           ) : (
             <div className="flex items-center gap-1.5 animate-slide-up">
-              <span className="readout text-xs text-alert-warning">
-                未行動あり
+              <span className="readout text-xs text-alert-warning font-bold">
+                ⚠ 未行動 {unactedCount}部隊あり
               </span>
               <button
-                onClick={handleEndPhase}
-                className="btn-approve py-1.5 px-3 gap-1 text-xs !bg-alert-warning/20 !border-alert-warning/40 !text-alert-warning"
+                onClick={handleCancelEnd}
+                className="btn-approve py-1.5 px-3 gap-1 text-xs"
+                autoFocus
               >
                 <ChevronRight className="w-3.5 h-3.5" />
-                確認
+                行動を続ける
               </button>
               <button
-                onClick={handleCancelEnd}
-                className="btn-tactical py-1.5 px-2.5 text-xs"
+                onClick={handleEndPhase}
+                className="btn-tactical py-1.5 px-2.5 text-xs !border-alert-critical/40 !text-alert-critical hover:!bg-alert-critical/10"
+                title="未行動ユニットを待機扱いにしてターン終了"
               >
-                戻る
+                強制終了
               </button>
             </div>
           )}

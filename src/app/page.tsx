@@ -487,7 +487,16 @@ export default function Dashboard() {
     onAttack: handleEnterAttackMode,
     onRepair: handleRepair,
     onWait: handleWait,
-    onEndTurn: handleEndPlayerPhase,
+    onEndTurn: () => {
+      // Space key: only end turn if all units have acted (prevents accidental force-end)
+      if (unactedCount > 0) {
+        setDispatchError(`未行動 ${unactedCount}部隊あり。「強制終了」ボタンで確定してください。`);
+        setTimeout(() => setDispatchError(null), 2500);
+        audio.playError();
+        return;
+      }
+      handleEndPlayerPhase();
+    },
     onEscape: handleCloseDetail,
     onCycleUnit: handleCycleUnit,
     onArrowMove: handleArrowMove,
