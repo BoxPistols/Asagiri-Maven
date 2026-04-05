@@ -254,7 +254,7 @@ export default function TutorialMode({ onComplete, onSkip }: TutorialModeProps) 
             {isLast ? (
               <>
                 <Play className="w-4 h-4" />
-                作戦開始
+                ブリーフィングへ
               </>
             ) : (
               <>

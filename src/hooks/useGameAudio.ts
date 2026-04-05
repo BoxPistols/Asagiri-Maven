@@ -13,14 +13,15 @@ export function useGameAudio() {
   const ctxRef = useRef<AudioContext | null>(null);
   const masterGainRef = useRef<GainNode | null>(null);
   const volumeRef = useRef(DEFAULT_VOLUME);
-  const [muted, setMuted] = useState(() => {
-    if (typeof window === "undefined") return false;
+  // Default muted=true (opt-in audio). Start muted to avoid hydration mismatch.
+  const [muted, setMuted] = useState(true);
+  useEffect(() => {
     try {
-      return localStorage.getItem(STORAGE_KEY) === "true";
-    } catch {
-      return false;
-    }
-  });
+      // Only unmute if user previously enabled audio
+      const stored = localStorage.getItem(STORAGE_KEY);
+      if (stored === "false") setMuted(false);
+    } catch { /* ignore */ }
+  }, []);
 
   // Persist muted state
   useEffect(() => {
