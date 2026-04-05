@@ -1,8 +1,9 @@
 "use client";
 
-import { useCallback, useRef, useState, useMemo } from "react";
+import { useCallback, useRef, useState, useMemo, useEffect } from "react";
 import { ThemeContext, useThemeProvider } from "@/hooks/useTheme";
 import { GameContext, useGameProvider } from "@/hooks/useGameEngine";
+import { useCombatEffects } from "@/hooks/useCombatEffects";
 import StatusHeader from "@/components/StatusHeader";
 import HudKpi from "@/components/HudKpi";
 import TacticalMap from "@/components/TacticalMap";
@@ -11,6 +12,10 @@ import WorkflowKanban from "@/components/WorkflowKanban";
 import ChatInterface from "@/components/ChatInterface";
 import GameOverlay from "@/components/GameOverlay";
 import GameControls from "@/components/GameControls";
+import TurnTransition from "@/components/TurnTransition";
+import DamagePopup, { combatEffectsToDamageEvents } from "@/components/DamagePopup";
+import UnitDetailPanel from "@/components/UnitDetailPanel";
+import TargetingOverlay from "@/components/TargetingOverlay";
 import ResizeHandle from "@/components/ResizeHandle";
 import { WAVE_CONFIGS } from "@/lib/scenarios";
 import type {
@@ -214,10 +219,126 @@ export default function Dashboard() {
   const { state, dispatch } = gameValue;
   const [, setSelectedMarker] = useState<string | null>(null);
 
+  // --- Turn transition state ---
+  const prevTurnRef = useRef(state.turn);
+  const prevWaveRef = useRef(state.wave);
+  const [showTurnTransition, setShowTurnTransition] = useState(false);
+  const [transitionMeta, setTransitionMeta] = useState({
+    turn: 1,
+    wave: 1,
+    hasCombat: false,
+    waveChanged: false,
+  });
+
+  useEffect(() => {
+    if (state.turn !== prevTurnRef.current && state.phase === "playing") {
+      // Detect combat: any log entry with role "combat" for the current turn
+      const hasCombat = state.log.some(
+        (l) => l.role === "combat" && l.turn === state.turn,
+      );
+      const waveChanged = state.wave !== prevWaveRef.current;
+
+      setTransitionMeta({
+        turn: state.turn,
+        wave: state.wave,
+        hasCombat,
+        waveChanged,
+      });
+      setShowTurnTransition(true);
+
+      // Auto-hide after animation completes (0.8s)
+      const timer = setTimeout(() => setShowTurnTransition(false), 850);
+
+      prevTurnRef.current = state.turn;
+      prevWaveRef.current = state.wave;
+      return () => clearTimeout(timer);
+    }
+    prevTurnRef.current = state.turn;
+    prevWaveRef.current = state.wave;
+  }, [state.turn, state.wave, state.phase, state.log]);
+
+  // --- Combat visual effects ---
+  const combatEffects = useCombatEffects(
+    state.log,
+    state.turn,
+    state.playerUnits,
+    state.enemyUnits,
+  );
+  const damageEvents = useMemo(
+    () => combatEffectsToDamageEvents(combatEffects),
+    [combatEffects],
+  );
+
+  // --- Unit selection & targeting ---
+  const [selectedUnit, setSelectedUnit] = useState<GameUnit | null>(null);
+  const [targetingMode, setTargetingMode] = useState(false);
+
   const handleSelectMarker = useCallback((id: string | null) => {
     setSelectedMarker(id);
     if (id) dispatch({ type: "SELECT_UNIT", unitId: id });
   }, [dispatch]);
+
+  const handleMarkerClick = useCallback((id: string) => {
+    // In targeting mode, clicking an enemy completes targeting
+    if (targetingMode && selectedUnit) {
+      const isEnemy = state.enemyUnits.some(u => u.id === id && u.status !== "destroyed");
+      if (isEnemy) {
+        dispatch({ type: "ASSIGN_TARGET", unitId: selectedUnit.id, targetUnitId: id });
+        setTargetingMode(false);
+        // Keep selected unit updated with new status
+        const updatedUnit = state.playerUnits.find(u => u.id === selectedUnit.id);
+        if (updatedUnit) {
+          setSelectedUnit({ ...updatedUnit, status: "moving", targetId: id });
+        }
+        return;
+      }
+    }
+
+    // Normal click: select the unit
+    const allUnits = [...state.playerUnits, ...state.enemyUnits];
+    const unit = allUnits.find(u => u.id === id);
+    if (unit) {
+      setSelectedUnit(unit);
+      setTargetingMode(false);
+    }
+  }, [targetingMode, selectedUnit, state.enemyUnits, state.playerUnits, dispatch]);
+
+  const handleAssignTarget = useCallback((_unitId: string) => {
+    setTargetingMode(true);
+  }, []);
+
+  const handleCancelTargeting = useCallback(() => {
+    setTargetingMode(false);
+  }, []);
+
+  const handleCloseDetail = useCallback(() => {
+    setSelectedUnit(null);
+    setTargetingMode(false);
+  }, []);
+
+  // Keep selectedUnit data fresh across turns
+  useEffect(() => {
+    if (!selectedUnit) return;
+    const allUnits = [...state.playerUnits, ...state.enemyUnits];
+    const fresh = allUnits.find(u => u.id === selectedUnit.id);
+    if (fresh) {
+      setSelectedUnit(fresh);
+    } else {
+      // Unit no longer exists (destroyed and removed)
+      setSelectedUnit(null);
+      setTargetingMode(false);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.turn, state.playerUnits, state.enemyUnits]);
+
+  // Compute the target name for display in UnitDetailPanel
+  const selectedTargetName = useMemo(() => {
+    if (!selectedUnit?.targetId) return undefined;
+    const target = state.enemyUnits.find(u => u.id === selectedUnit.targetId);
+    if (target) return target.name;
+    const event = state.events.find(e => e.id === selectedUnit.targetId);
+    return event?.title;
+  }, [selectedUnit, state.enemyUnits, state.events]);
 
   // Adapt game state to component props
   const hudData = useMemo(() => gameKpisToHudData(state.kpis), [state.kpis]);
@@ -270,12 +391,15 @@ export default function Dashboard() {
               <div className="border-b border-border-subtle bg-bg-primary/60 px-5 py-2 shrink-0">
                 <HudKpi data={hudData} />
               </div>
-              <div className="flex-1 min-h-0">
+              <div className="flex-1 min-h-0 relative">
                 <TacticalMap
                   onSelectMarker={handleSelectMarker}
+                  onMarkerClick={handleMarkerClick}
                   markers={playerMarkers}
                   enemyUnits={state.enemyUnits}
                   playerUnits={state.playerUnits}
+                  selectedUnitId={selectedUnit?.id ?? null}
+                  targetingMode={targetingMode}
                 >
                   {state.phase === "playing" || state.phase === "paused" ? (
                     <GameControls
@@ -288,7 +412,26 @@ export default function Dashboard() {
                       onResume={handleResume}
                     />
                   ) : null}
+                  <UnitDetailPanel
+                    unit={selectedUnit}
+                    onAssignTarget={handleAssignTarget}
+                    onClose={handleCloseDetail}
+                    targetName={selectedTargetName}
+                  />
+                  <TargetingOverlay
+                    active={targetingMode}
+                    sourceUnit={selectedUnit}
+                    onSelectTarget={(targetId) => {
+                      if (selectedUnit) {
+                        dispatch({ type: "ASSIGN_TARGET", unitId: selectedUnit.id, targetUnitId: targetId });
+                        setTargetingMode(false);
+                      }
+                    }}
+                    onCancel={handleCancelTargeting}
+                  />
                 </TacticalMap>
+                {/* Floating damage numbers overlay */}
+                <DamagePopup damages={damageEvents} />
               </div>
             </div>
 
@@ -321,6 +464,15 @@ export default function Dashboard() {
               {dispatchError}
             </div>
           )}
+
+          {/* Turn transition flash */}
+          <TurnTransition
+            turn={transitionMeta.turn}
+            wave={transitionMeta.wave}
+            show={showTurnTransition}
+            hasCombat={transitionMeta.hasCombat}
+            waveChanged={transitionMeta.waveChanged}
+          />
 
           {/* Game overlay for briefing / victory / defeat */}
           <GameOverlay

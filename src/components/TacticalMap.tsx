@@ -117,13 +117,16 @@ const TILE_LIGHT = "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.p
 
 interface TacticalMapProps {
   onSelectMarker?: (id: string | null) => void;
+  onMarkerClick?: (id: string) => void;
   markers?: MapMarker[];
   enemyUnits?: GameUnit[];
   playerUnits?: GameUnit[];
+  selectedUnitId?: string | null;
+  targetingMode?: boolean;
   children?: React.ReactNode;
 }
 
-export default function TacticalMap({ onSelectMarker, markers, enemyUnits, playerUnits, children }: TacticalMapProps) {
+export default function TacticalMap({ onSelectMarker, onMarkerClick, markers, enemyUnits, playerUnits, selectedUnitId, targetingMode, children }: TacticalMapProps) {
   const { theme } = useTheme();
   const [mounted, setMounted] = useState(false);
   const [timeValue, setTimeValue] = useState(100);
@@ -169,20 +172,25 @@ export default function TacticalMap({ onSelectMarker, markers, enemyUnits, playe
     const typeChar = "E";
     const color = "#f87171";
     const pulseClass = isEngaging || isDamaged ? "enemy-pulse-anim" : "";
+    const targetGlow = targetingMode
+      ? "box-shadow:0 0 12px rgba(248,113,113,0.5),0 0 24px rgba(248,113,113,0.2);animation:targeting-enemy-glow 1.5s ease-in-out infinite;"
+      : "";
+    const targetCursor = targetingMode ? "cursor:crosshair;" : "";
 
     return L.divIcon({
       className: "custom-marker",
       html: `
-        <div style="position:relative;display:flex;align-items:center;justify-content:center;" class="${pulseClass}">
+        <div style="position:relative;display:flex;align-items:center;justify-content:center;${targetCursor}" class="${pulseClass}">
           <span style="position:absolute;width:36px;height:36px;border-radius:50%;background:${color};opacity:0.15;animation:enemy-pulse 1.8s ease-out infinite;"></span>
+          ${targetingMode ? `<span style="position:absolute;width:42px;height:42px;border-radius:50%;border:2px dashed ${color};opacity:0.7;${targetGlow}"></span>` : ""}
           <span style="position:relative;display:flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:50%;background:rgba(248,113,113,0.2);border:2px solid ${color};font-family:var(--font-mono);font-size:11px;font-weight:bold;color:${color};">
             ${typeChar}
           </span>
         </div>
       `,
-      iconSize: [36, 36],
-      iconAnchor: [18, 18],
-      popupAnchor: [0, -18],
+      iconSize: [42, 42],
+      iconAnchor: [21, 21],
+      popupAnchor: [0, -21],
     });
   };
 
@@ -196,21 +204,26 @@ export default function TacticalMap({ onSelectMarker, markers, enemyUnits, playe
     const L = require("leaflet");
     const color = statusColor(marker.status);
     const isAlert = marker.status === "critical" || marker.status === "warning";
+    const isSelected = marker.id === selectedUnitId;
     const typeChar = marker.type === "facility" ? "F" : marker.type === "vehicle" ? "V" : marker.type === "drone" ? "D" : marker.type === "alert" ? "!" : "P";
+    const selectedRing = isSelected
+      ? `<span style="position:absolute;width:38px;height:38px;border-radius:50%;border:2px solid var(--accent-cyan);opacity:0.9;animation:glow-pulse 2s ease-in-out infinite;"></span>`
+      : "";
 
     return L.divIcon({
       className: "custom-marker",
       html: `
         <div style="position:relative;display:flex;align-items:center;justify-content:center;">
+          ${selectedRing}
           ${isAlert ? `<span style="position:absolute;width:32px;height:32px;border-radius:50%;background:${color};opacity:0.2;animation:pulse-ring 2s ease-out infinite;"></span>` : ""}
           <span style="position:relative;display:flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:50%;background:${color}20;border:2px solid ${color};font-family:var(--font-mono);font-size:12px;font-weight:bold;color:${color};">
             ${typeChar}
           </span>
         </div>
       `,
-      iconSize: [32, 32],
-      iconAnchor: [16, 16],
-      popupAnchor: [0, -16],
+      iconSize: [38, 38],
+      iconAnchor: [19, 19],
+      popupAnchor: [0, -19],
     });
   };
 
@@ -230,7 +243,7 @@ export default function TacticalMap({ onSelectMarker, markers, enemyUnits, playe
       </div>
 
       {/* Map */}
-      <div className="flex-1 relative overflow-hidden">
+      <div className={`flex-1 relative overflow-hidden${targetingMode ? " cursor-crosshair" : ""}`}>
         {mounted && (
           <>
             <link
@@ -285,7 +298,10 @@ export default function TacticalMap({ onSelectMarker, markers, enemyUnits, playe
                   position={[m.lat, m.lng] as [number, number]}
                   icon={createIcon(m)}
                   eventHandlers={{
-                    click: () => onSelectMarker?.(m.id),
+                    click: () => {
+                      onMarkerClick?.(m.id);
+                      onSelectMarker?.(m.id);
+                    },
                   }}
                 >
                   <Popup>
@@ -318,6 +334,12 @@ export default function TacticalMap({ onSelectMarker, markers, enemyUnits, playe
                   key={`enemy-${unit.id}`}
                   position={[unit.lat, unit.lng] as [number, number]}
                   icon={createEnemyIcon(unit)}
+                  eventHandlers={{
+                    click: () => {
+                      onMarkerClick?.(unit.id);
+                      onSelectMarker?.(unit.id);
+                    },
+                  }}
                 >
                   <Popup>
                     <div className="min-w-[200px] p-0 text-text-primary" style={{ fontFamily: "var(--font-display)" }}>

@@ -6,6 +6,14 @@ import type {
   GameUnit,
   WaveConfig,
 } from "@/lib/game-types";
+import {
+  calculateDamage,
+  isInRange,
+  getAttackRange,
+  getTypeAdvantage,
+  isNearFriendlyFacility,
+} from "@/lib/combat-rules";
+import { formatCombatLog } from "@/lib/combat-log-formatter";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -16,11 +24,6 @@ function distance(a: { lat: number; lng: number }, b: { lat: number; lng: number
   const dlat = a.lat - b.lat;
   const dlng = (a.lng - b.lng) * Math.cos(((a.lat + b.lat) / 2) * (Math.PI / 180));
   return Math.sqrt(dlat * dlat + dlng * dlng);
-}
-
-/** Random float in [min, max). */
-function randFloat(min: number, max: number): number {
-  return Math.random() * (max - min) + min;
 }
 
 function uid(): string {
@@ -59,15 +62,21 @@ export function generateEnemyActions(
 
 // ---------------------------------------------------------------------------
 // 2. Move enemy units toward nearest player facility / engaging unit
+//    — Now uses attack range and type advantage targeting
 // ---------------------------------------------------------------------------
 
 export function moveEnemyUnits(state: GameState): GameUnit[] {
-  const playerFacilities = state.playerUnits.filter(
-    (u) => u.status !== "destroyed" && u.type !== "drone",
+  const livingPlayerUnits = state.playerUnits.filter(
+    (u) => u.status !== "destroyed",
+  );
+  const playerFacilities = livingPlayerUnits.filter((u) =>
+    u.id.startsWith("base-"),
   );
 
   return state.enemyUnits.map((enemy) => {
     if (enemy.status === "destroyed") return enemy;
+
+    const enemyRange = enemy.range ?? getAttackRange(enemy.type);
 
     // If a player unit is engaging this enemy, stand and fight
     const engager = state.playerUnits.find(
@@ -78,45 +87,76 @@ export function moveEnemyUnits(state: GameState): GameUnit[] {
       return { ...enemy, status: "engaging" as const, targetId: engager.id };
     }
 
-    // Otherwise pick the nearest player facility
-    let closest: GameUnit | undefined;
-    let closestDist = Infinity;
+    // --- Smart targeting: prefer units we have type advantage against ---
+    // Score each potential target: advantage bonus + proximity bonus + low-HP bonus
+    let bestTarget: GameUnit | undefined;
+    let bestScore = -Infinity;
 
-    for (const fac of playerFacilities) {
-      const d = distance(enemy, fac);
-      if (d < closestDist) {
-        closestDist = d;
-        closest = fac;
+    for (const target of livingPlayerUnits) {
+      const d = distance(enemy, target);
+      const typeAdv = getTypeAdvantage(enemy.type, target.type);
+
+      // Score components:
+      // - Type advantage bonus (strongly preferred)
+      let score = typeAdv * 100;
+      // - Proximity bonus (closer is better, normalized)
+      score += Math.max(0, 20 - d * 5);
+      // - Low HP bonus (finish off wounded units)
+      score += (1 - target.hp / target.maxHp) * 30;
+      // - Facility priority (always worth attacking)
+      if (target.id.startsWith("base-")) score += 15;
+
+      if (score > bestScore) {
+        bestScore = score;
+        bestTarget = target;
       }
     }
 
-    if (!closest) return enemy;
+    if (!bestTarget) {
+      // Fallback: pick nearest facility
+      let closest: GameUnit | undefined;
+      let closestDist = Infinity;
+      for (const fac of playerFacilities) {
+        const d = distance(enemy, fac);
+        if (d < closestDist) {
+          closestDist = d;
+          closest = fac;
+        }
+      }
+      bestTarget = closest;
+    }
 
-    // Move toward it
-    const d = closestDist;
-    const step = Math.min(enemy.speed, d);
+    if (!bestTarget) return enemy;
 
-    if (d < 0.05) {
-      // Close enough to engage
-      return { ...enemy, status: "engaging" as const, targetId: closest.id };
+    const d = distance(enemy, bestTarget);
+
+    // If target is in attack range, engage
+    if (d <= enemyRange) {
+      return { ...enemy, status: "engaging" as const, targetId: bestTarget.id };
+    }
+
+    // Move toward target — stop when in range
+    const step = Math.min(enemy.speed, d - enemyRange * 0.8); // Approach to just inside range
+    if (step <= 0) {
+      return { ...enemy, status: "engaging" as const, targetId: bestTarget.id };
     }
 
     const ratio = step / d;
-    const newLat = enemy.lat + (closest.lat - enemy.lat) * ratio;
-    const newLng = enemy.lng + (closest.lng - enemy.lng) * ratio;
+    const newLat = enemy.lat + (bestTarget.lat - enemy.lat) * ratio;
+    const newLng = enemy.lng + (bestTarget.lng - enemy.lng) * ratio;
 
     return {
       ...enemy,
       lat: newLat,
       lng: newLng,
       status: "moving" as const,
-      targetId: closest.id,
+      targetId: bestTarget.id,
     };
   });
 }
 
 // ---------------------------------------------------------------------------
-// 3. Resolve combat engagements
+// 3. Resolve combat engagements — using combat-rules system
 // ---------------------------------------------------------------------------
 
 export interface EngagementResult {
@@ -130,8 +170,6 @@ export function resolveEngagements(state: GameState): EngagementResult {
   const enemyMap = new Map(state.enemyUnits.map((u) => [u.id, { ...u }]));
   const combatLog: string[] = [];
 
-  const ENGAGE_RANGE = 0.15; // ~15 km on the flat-Earth approx
-
   // --- Player units attacking enemy units ---
   for (const [, player] of playerMap) {
     if (player.status === "destroyed") continue;
@@ -140,22 +178,43 @@ export function resolveEngagements(state: GameState): EngagementResult {
     const target = enemyMap.get(player.targetId);
     if (!target || target.status === "destroyed") continue;
 
-    const d = distance(player, target);
-    if (d > ENGAGE_RANGE) continue;
+    // Range check using new system
+    if (!isInRange(player, target)) continue;
 
-    // Player attacks enemy
-    const dmg = calcDamage(player, target);
-    target.hp = Math.max(0, target.hp - dmg);
-    combatLog.push(
-      `${player.name} が ${target.name} に ${dmg} ダメージ（残HP ${target.hp}）`,
-    );
+    // Facility defense — enemy near its own "facility" doesn't apply (enemies have none)
+    const nearFacility = false;
 
-    if (target.hp <= 0) {
+    const result = calculateDamage(player, target, nearFacility);
+    target.hp = Math.max(0, target.hp - result.damage);
+
+    const destroyed = target.hp <= 0;
+    if (destroyed) {
       target.status = "destroyed";
-      combatLog.push(`>>> ${target.name} 撃破！`);
     } else {
       target.status = "engaging";
       player.status = "engaging";
+    }
+
+    // Format combat log
+    combatLog.push(
+      formatCombatLog({
+        attackerName: player.name,
+        defenderName: target.name,
+        damage: result.damage,
+        advantage: result.advantage,
+        critical: result.critical,
+        defenderDestroyed: destroyed,
+      }),
+    );
+
+    // Advantage/critical supplementary messages
+    if (result.advantage === "strong") {
+      combatLog.push(`  └ 有利な戦闘（${player.type} → ${target.type}）`);
+    } else if (result.advantage === "weak") {
+      combatLog.push(`  └ 不利な戦闘（${player.type} → ${target.type}）`);
+    }
+    if (result.critical && !destroyed) {
+      combatLog.push(`  └ クリティカルヒット！`);
     }
   }
 
@@ -167,21 +226,50 @@ export function resolveEngagements(state: GameState): EngagementResult {
     const target = playerMap.get(enemy.targetId);
     if (!target || target.status === "destroyed") continue;
 
-    const d = distance(enemy, target);
-    if (d > ENGAGE_RANGE) continue;
+    // Range check
+    if (!isInRange(enemy, target)) continue;
 
-    const dmg = calcDamage(enemy, target);
-    target.hp = Math.max(0, target.hp - dmg);
-    combatLog.push(
-      `${enemy.name} が ${target.name} に ${dmg} ダメージ（残HP ${target.hp}）`,
+    // Facility defense bonus — player unit near friendly facility
+    const nearFacility = isNearFriendlyFacility(
+      target,
+      Array.from(playerMap.values()),
     );
 
-    if (target.hp <= 0) {
+    const result = calculateDamage(enemy, target, nearFacility);
+    target.hp = Math.max(0, target.hp - result.damage);
+
+    const destroyed = target.hp <= 0;
+    if (destroyed) {
       target.status = "destroyed";
-      combatLog.push(`>>> ${target.name} が破壊された！`);
     } else {
       target.status = "damaged";
       enemy.status = "engaging";
+    }
+
+    // Format combat log
+    combatLog.push(
+      formatCombatLog({
+        attackerName: enemy.name,
+        defenderName: target.name,
+        damage: result.damage,
+        advantage: result.advantage,
+        critical: result.critical,
+        defenderDestroyed: destroyed,
+      }),
+    );
+
+    if (result.advantage === "strong") {
+      combatLog.push(`  └ 有利な戦闘（${enemy.type} → ${target.type}）`);
+    } else if (result.advantage === "weak") {
+      combatLog.push(`  └ 不利な戦闘（${enemy.type} → ${target.type}）`);
+    }
+    if (result.critical && !destroyed) {
+      combatLog.push(`  └ クリティカルヒット！`);
+    }
+
+    // Facility defense indicator
+    if (nearFacility) {
+      combatLog.push(`  └ 施設防御ボーナス適用（被ダメ-20%）`);
     }
   }
 
@@ -190,14 +278,4 @@ export function resolveEngagements(state: GameState): EngagementResult {
     updatedEnemy: Array.from(enemyMap.values()),
     combatLog,
   };
-}
-
-// ---------------------------------------------------------------------------
-// Combat formula
-// ---------------------------------------------------------------------------
-
-function calcDamage(attacker: GameUnit, defender: GameUnit): number {
-  const base = attacker.attack * (1 - defender.defense / 200);
-  const noise = randFloat(-5, 5);
-  return Math.max(1, Math.round(base + noise));
 }

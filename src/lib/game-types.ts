@@ -27,6 +27,7 @@ export interface GameUnit {
   status: "idle" | "moving" | "engaging" | "damaged" | "destroyed";
   targetId?: string;   // mission or enemy id
   detail: string;
+  range?: number;      // override default attack range from type
 }
 
 export interface GameEvent {
@@ -97,5 +98,6 @@ export type GameAction =
   | { type: "RESUME" }
   | { type: "DISPATCH_UNIT"; unitId: string; eventId: string }
   | { type: "APPROVE_MISSION"; missionId: string }
+  | { type: "ASSIGN_TARGET"; unitId: string; targetUnitId: string }
   | { type: "SELECT_UNIT"; unitId: string | null }
   | { type: "SELECT_EVENT"; eventId: string | null };

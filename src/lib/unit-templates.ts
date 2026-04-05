@@ -9,6 +9,7 @@ export interface UnitTemplate {
   attack: number;
   defense: number;
   speed: number;
+  description: string;
 }
 
 /** 偵察ドローン — 低耐久・高速・低火力 */
@@ -19,6 +20,7 @@ export const SCOUT_DRONE: UnitTemplate = {
   attack: 10,
   defense: 10,
   speed: 3,
+  description: "高速偵察。対歩兵有利、対艦不利",
 };
 
 /** 攻撃ドローン — 中耐久・中速・中火力 */
@@ -29,6 +31,7 @@ export const COMBAT_DRONE: UnitTemplate = {
   attack: 20,
   defense: 15,
   speed: 2,
+  description: "攻撃型無人機。対歩兵有利、対艦不利",
 };
 
 /** 哨戒艦 — 高耐久・低速・中火力・高防御 */
@@ -39,6 +42,7 @@ export const PATROL_SHIP: UnitTemplate = {
   attack: 25,
   defense: 40,
   speed: 1,
+  description: "哨戒・防空艦。対ドローン有利、対車両不利",
 };
 
 /** 強襲揚陸艦 — 高耐久・低速・高火力・高防御 */
@@ -49,6 +53,7 @@ export const ASSAULT_SHIP: UnitTemplate = {
   attack: 35,
   defense: 45,
   speed: 1,
+  description: "強襲揚陸艦。対ドローン有利、対車両不利",
 };
 
 /** 敵司令艦 (ボス) — 最大耐久・低速・最高火力・最高防御 */
@@ -59,6 +64,7 @@ export const COMMAND_SHIP: UnitTemplate = {
   attack: 40,
   defense: 50,
   speed: 1,
+  description: "敵艦隊旗艦。重装甲・高火力。車両部隊で攻めろ",
 };
 
 /** サイバー戦ユニット — 低耐久・高速（仮想移動）・特殊攻撃・低防御 */
@@ -69,6 +75,7 @@ export const CYBER_UNIT: UnitTemplate = {
   attack: 15,
   defense: 8,
   speed: 4,
+  description: "電子戦特化。対ドローン有利、対歩兵不利。射程無制限",
 };
 
 /** 地上車両 — 中耐久・中速・中火力・中防御 */
@@ -79,6 +86,7 @@ export const GROUND_VEHICLE: UnitTemplate = {
   attack: 22,
   defense: 30,
   speed: 2,
+  description: "汎用装甲車両。対艦有利、対ドローン不利",
 };
 
 /** 精鋭車両 — 高耐久・中速・高火力・高防御 */
@@ -89,6 +97,7 @@ export const ELITE_VEHICLE: UnitTemplate = {
   attack: 30,
   defense: 38,
   speed: 2,
+  description: "精鋭機甲部隊。対艦有利、対ドローン不利",
 };
 
 /** 全テンプレート一覧 */

@@ -386,3 +386,68 @@ body::after {
     0 2px 12px rgba(0, 0, 0, 0.08),
     0 1px 3px rgba(0, 0, 0, 0.04);
 }
+
+/* ========== Visual Effects: Damage & Combat ========== */
+
+/* Damage popup - float up and fade */
+@keyframes damage-float {
+  0% { opacity: 1; transform: translateY(0); }
+  70% { opacity: 1; transform: translateY(-25px); }
+  100% { opacity: 0; transform: translateY(-35px); }
+}
+.animate-damage-float {
+  animation: damage-float 1.5s ease-out forwards;
+}
+
+/* Turn transition */
+@keyframes turn-flash {
+  0% { opacity: 0; }
+  15% { opacity: 1; }
+  70% { opacity: 1; }
+  100% { opacity: 0; }
+}
+.animate-turn-flash {
+  animation: turn-flash 0.8s ease-in-out forwards;
+}
+
+/* Unit selected pulse ring (for SVG r attribute) */
+@keyframes selected-ring {
+  0%, 100% { r: 14; opacity: 0.6; }
+  50% { r: 18; opacity: 0.3; }
+}
+
+/* Engagement line animated dash */
+@keyframes dash-march {
+  to { stroke-dashoffset: -20; }
+}
+.animate-dash-march {
+  animation: dash-march 0.8s linear infinite;
+}
+
+/* Combat explosion flash */
+@keyframes explosion {
+  0% { transform: scale(0.5); opacity: 0.8; }
+  50% { transform: scale(2); opacity: 0.4; }
+  100% { transform: scale(3); opacity: 0; }
+}
+.animate-explosion {
+  animation: explosion 0.6s ease-out forwards;
+}
+
+/* Damage popup marker — no leaflet default styles */
+.damage-popup-marker {
+  background: transparent !important;
+  border: none !important;
+  pointer-events: none !important;
+}
+
+/* Light mode: darker text for readability on damage popups */
+[data-theme="light"] .damage-popup-text {
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.2) !important;
+}
+[data-theme="light"] .animate-turn-flash {
+  color: var(--text-primary);
+}
+[data-theme="light"] .animate-explosion {
+  filter: brightness(0.8);
+}

@@ -528,6 +528,34 @@ function gameReducer(state: GameState, action: GameAction): GameState {
     case "RESUME":
       return state.phase === "paused" ? { ...state, phase: "playing" } : state;
 
+    // ===== ASSIGN_TARGET =====
+    case "ASSIGN_TARGET": {
+      const { unitId, targetUnitId } = action;
+      const unit = state.playerUnits.find((u) => u.id === unitId);
+      const target = state.enemyUnits.find((u) => u.id === targetUnitId);
+      if (!unit || !target) return state;
+      if (unit.status === "destroyed" || target.status === "destroyed") return state;
+
+      const updatedUnits = state.playerUnits.map((u) =>
+        u.id === unitId
+          ? { ...u, status: "moving" as const, targetId: targetUnitId }
+          : u,
+      );
+
+      return {
+        ...state,
+        playerUnits: updatedUnits,
+        log: [
+          ...state.log,
+          makeLog(
+            "player",
+            `${unit.name} → 敵 ${target.name} に目標指定`,
+            state.turn,
+          ),
+        ],
+      };
+    }
+
     // ===== SELECT =====
     case "SELECT_UNIT":
       return { ...state, selectedUnitId: action.unitId };
