@@ -4,94 +4,28 @@ import { useCallback, useRef, useState, useMemo, useEffect } from "react";
 import { ThemeContext, useThemeProvider } from "@/hooks/useTheme";
 import { GameContext, useGameProvider } from "@/hooks/useGameEngine";
 import { useCombatEffects } from "@/hooks/useCombatEffects";
-import StatusHeader from "@/components/StatusHeader";
-import HudKpi from "@/components/HudKpi";
+import { useGameAudio } from "@/hooks/useGameAudio";
+import { useGameSoundEffects } from "@/hooks/useGameSoundEffects";
+import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
+import GameHud from "@/components/GameHud";
 import TacticalMap from "@/components/TacticalMap";
-import AiTriage from "@/components/AiTriage";
-import WorkflowKanban from "@/components/WorkflowKanban";
-import ChatInterface from "@/components/ChatInterface";
+import PhaseIndicator from "@/components/PhaseIndicator";
+import IntelDrawer from "@/components/IntelDrawer";
 import GameOverlay from "@/components/GameOverlay";
 import GameControls from "@/components/GameControls";
 import TurnTransition from "@/components/TurnTransition";
 import DamagePopup, { combatEffectsToDamageEvents } from "@/components/DamagePopup";
 import UnitDetailPanel from "@/components/UnitDetailPanel";
 import TargetingOverlay from "@/components/TargetingOverlay";
-import ResizeHandle from "@/components/ResizeHandle";
 import { WAVE_CONFIGS } from "@/lib/scenarios";
 import { isNearFriendlyFacility } from "@/lib/combat-rules";
 import type {
   GameEvent,
   GameUnit,
-  GameKpis,
   Mission,
   GameLogEntry,
 } from "@/lib/game-types";
-import type { AlertItem, MapMarker, KpiData, WorkflowCard, ChatMessage, SeverityLevel } from "@/lib/mock-data";
-
-// ========== Resizable Sidebar ==========
-
-const MIN_PANEL = 80;
-
-function SidebarPanels({ alerts, workflowCards, chatMessages, onSelectMarker, onAdvanceMission }: {
-  alerts: AlertItem[];
-  workflowCards: WorkflowCard[];
-  chatMessages: ChatMessage[];
-  onSelectMarker: (id: string | null) => void;
-  onAdvanceMission: (missionId: string) => void;
-}) {
-  const containerRef = useRef<HTMLDivElement>(null);
-  // Store panel heights as ratios (percent of container)
-  const [splits, setSplits] = useState({ triageRatio: 0.42, workflowRatio: 0.28 });
-  // chat gets the remainder: 1 - triage - workflow
-
-  const handleResize1 = useCallback((deltaY: number) => {
-    if (!containerRef.current) return;
-    const h = containerRef.current.clientHeight;
-    if (h === 0) return;
-    const deltaRatio = deltaY / h;
-    setSplits(prev => {
-      const newTriage = Math.max(MIN_PANEL / h, Math.min(prev.triageRatio + deltaRatio, 1 - prev.workflowRatio - MIN_PANEL / h));
-      return { ...prev, triageRatio: newTriage };
-    });
-  }, []);
-
-  const handleResize2 = useCallback((deltaY: number) => {
-    if (!containerRef.current) return;
-    const h = containerRef.current.clientHeight;
-    if (h === 0) return;
-    const deltaRatio = deltaY / h;
-    setSplits(prev => {
-      const newWorkflow = Math.max(MIN_PANEL / h, Math.min(prev.workflowRatio + deltaRatio, 1 - prev.triageRatio - MIN_PANEL / h));
-      return { ...prev, workflowRatio: newWorkflow };
-    });
-  }, []);
-
-  const triagePct = `${splits.triageRatio * 100}%`;
-  const workflowPct = `${splits.workflowRatio * 100}%`;
-  // chat is the rest, handled by flex-1
-
-  return (
-    <div ref={containerRef} className="w-[380px] shrink-0 flex flex-col border-l border-border-subtle">
-      <div className="min-h-0 overflow-hidden" style={{ height: triagePct }}>
-        <AiTriage
-          onSelectMarker={onSelectMarker}
-          alerts={alerts}
-        />
-      </div>
-      <ResizeHandle onResize={handleResize1} />
-      <div className="min-h-0 overflow-hidden" style={{ height: workflowPct }}>
-        <WorkflowKanban
-          cards={workflowCards}
-          onAdvance={onAdvanceMission}
-        />
-      </div>
-      <ResizeHandle onResize={handleResize2} />
-      <div className="flex-1 min-h-0 overflow-hidden">
-        <ChatInterface messages={chatMessages} />
-      </div>
-    </div>
-  );
-}
+import type { AlertItem, MapMarker, WorkflowCard, ChatMessage, SeverityLevel } from "@/lib/mock-data";
 
 // ========== Adapter functions: game state -> component props ==========
 
@@ -166,35 +100,6 @@ function gameUnitsToMarkers(units: GameUnit[]): MapMarker[] {
     }));
 }
 
-function gameKpisToHudData(kpis: GameKpis): KpiData[] {
-  const kpiConfig: {
-    key: keyof GameKpis;
-    label: string;
-    unit: string;
-  }[] = [
-    { key: "combat", label: "戦力", unit: "pt" },
-    { key: "supply", label: "物資", unit: "pt" },
-    { key: "morale", label: "士気", unit: "pt" },
-    { key: "intel", label: "情報", unit: "pt" },
-  ];
-
-  return kpiConfig.map((cfg) => {
-    const val = kpis[cfg.key];
-    const severity: SeverityLevel =
-      val <= 20 ? "critical" : val <= 50 ? "warning" : val <= 75 ? "info" : "normal";
-    const trend: KpiData["trend"] =
-      val <= 30 ? "down" : val >= 80 ? "up" : "stable";
-    return {
-      label: cfg.label,
-      value: String(val),
-      unit: cfg.unit,
-      trend,
-      trendValue: `${val}%`,
-      severity,
-    };
-  });
-}
-
 function gameLogToChat(log: GameLogEntry[]): ChatMessage[] {
   const roleMap: Record<GameLogEntry["role"], ChatMessage["role"]> = {
     system: "system",
@@ -217,6 +122,10 @@ export default function Dashboard() {
   const gameValue = useGameProvider();
   const { state, dispatch } = gameValue;
   const [, setSelectedMarker] = useState<string | null>(null);
+
+  // --- Audio ---
+  const audio = useGameAudio();
+  useGameSoundEffects(state, audio);
 
   // --- Turn transition state ---
   const prevTurnRef = useRef(state.turn);
@@ -298,6 +207,7 @@ export default function Dashboard() {
     if (attackMode && selectedUnit) {
       const isEnemy = state.enemyUnits.some(u => u.id === id && u.status !== "destroyed");
       if (isEnemy) {
+        audio.playAttack();
         dispatch({ type: "ATTACK_UNIT", unitId: selectedUnit.id, targetId: id });
         setAttackMode(false);
         return;
@@ -308,6 +218,7 @@ export default function Dashboard() {
     if (targetingMode && selectedUnit) {
       const isEnemy = state.enemyUnits.some(u => u.id === id && u.status !== "destroyed");
       if (isEnemy) {
+        audio.playAttack();
         dispatch({ type: "ATTACK_UNIT", unitId: selectedUnit.id, targetId: id });
         setTargetingMode(false);
         return;
@@ -318,45 +229,51 @@ export default function Dashboard() {
     const allUnits = [...state.playerUnits, ...state.enemyUnits];
     const unit = allUnits.find(u => u.id === id);
     if (unit) {
+      audio.playSelect();
       setSelectedUnit(unit);
       setTargetingMode(false);
       setMoveMode(false);
       setAttackMode(false);
     }
-  }, [attackMode, targetingMode, selectedUnit, state.enemyUnits, state.playerUnits, dispatch]);
+  }, [attackMode, targetingMode, selectedUnit, state.enemyUnits, state.playerUnits, dispatch, audio]);
 
   // Map click handler (for movement)
   const handleMapClick = useCallback((lat: number, lng: number) => {
     if (moveMode && selectedUnit && !selectedUnit.actedThisTurn && state.turnPhase === "player") {
+      audio.playMove();
       dispatch({ type: "MOVE_UNIT", unitId: selectedUnit.id, lat, lng });
       setMoveMode(false);
     }
-  }, [moveMode, selectedUnit, state.turnPhase, dispatch]);
+  }, [moveMode, selectedUnit, state.turnPhase, dispatch, audio]);
 
   // Action mode toggles
   const handleEnterMoveMode = useCallback(() => {
+    audio.playButton();
     setMoveMode(true);
     setAttackMode(false);
     setTargetingMode(false);
-  }, []);
+  }, [audio]);
 
   const handleEnterAttackMode = useCallback(() => {
+    audio.playButton();
     setAttackMode(true);
     setMoveMode(false);
     setTargetingMode(true); // use targeting overlay for attack mode
-  }, []);
+  }, [audio]);
 
   const handleRepair = useCallback(() => {
     if (selectedUnit) {
+      audio.playRepair();
       dispatch({ type: "REPAIR_UNIT", unitId: selectedUnit.id });
     }
-  }, [selectedUnit, dispatch]);
+  }, [selectedUnit, dispatch, audio]);
 
   const handleWait = useCallback(() => {
     if (selectedUnit) {
+      audio.playButton();
       dispatch({ type: "WAIT_UNIT", unitId: selectedUnit.id });
     }
-  }, [selectedUnit, dispatch]);
+  }, [selectedUnit, dispatch, audio]);
 
   const handleCancelTargeting = useCallback(() => {
     setTargetingMode(false);
@@ -366,12 +283,6 @@ export default function Dashboard() {
   const handleCloseDetail = useCallback(() => {
     setSelectedUnit(null);
     setTargetingMode(false);
-    setMoveMode(false);
-    setAttackMode(false);
-  }, []);
-
-  const handleAssignTarget = useCallback((_unitId: string) => {
-    setTargetingMode(true);
     setMoveMode(false);
     setAttackMode(false);
   }, []);
@@ -401,18 +312,32 @@ export default function Dashboard() {
   }, [selectedUnit, state.enemyUnits, state.events]);
 
   // Adapt game state to component props
-  const hudData = useMemo(() => gameKpisToHudData(state.kpis), [state.kpis]);
   const alerts = useMemo(() => gameEventsToAlerts(state.events), [state.events]);
   const workflowCards = useMemo(() => gameMissionsToWorkflow(state.missions), [state.missions]);
   const chatMessages = useMemo(() => gameLogToChat(state.log), [state.log]);
   const playerMarkers = useMemo(() => gameUnitsToMarkers(state.playerUnits), [state.playerUnits]);
 
   // Handlers
-  const handleEndPlayerPhase = useCallback(() => dispatch({ type: "END_PLAYER_PHASE" }), [dispatch]);
-  const handlePause = useCallback(() => dispatch({ type: "PAUSE" }), [dispatch]);
-  const handleResume = useCallback(() => dispatch({ type: "RESUME" }), [dispatch]);
-  const handleStart = useCallback(() => dispatch({ type: "START_GAME" }), [dispatch]);
-  const handleRestart = useCallback(() => dispatch({ type: "START_GAME" }), [dispatch]);
+  const handleEndPlayerPhase = useCallback(() => {
+    audio.playButton();
+    dispatch({ type: "END_PLAYER_PHASE" });
+  }, [dispatch, audio]);
+  const handlePause = useCallback(() => {
+    audio.playButton();
+    dispatch({ type: "PAUSE" });
+  }, [dispatch, audio]);
+  const handleResume = useCallback(() => {
+    audio.playButton();
+    dispatch({ type: "RESUME" });
+  }, [dispatch, audio]);
+  const handleStart = useCallback(() => {
+    audio.playButton();
+    dispatch({ type: "START_GAME" });
+  }, [dispatch, audio]);
+  const handleRestart = useCallback(() => {
+    audio.playButton();
+    dispatch({ type: "START_GAME" });
+  }, [dispatch, audio]);
 
   // Auto-cycle: when turnPhase is "enemy", process enemy phase after a short delay
   useEffect(() => {
@@ -455,9 +380,36 @@ export default function Dashboard() {
     return isNearFriendlyFacility(selectedUnit, state.playerUnits);
   }, [selectedUnit, state.playerUnits, state.supply]);
 
-  const handleAdvanceMission = useCallback((_id: string) => {
-    // Missions auto-resolve when linked enemies are destroyed.
-  }, []);
+  // --- Keyboard shortcut: cycle to next unacted unit ---
+  const handleCycleUnit = useCallback(() => {
+    const unactedUnits = state.playerUnits.filter(
+      u => u.status !== "destroyed" && u.speed > 0 && !u.actedThisTurn,
+    );
+    if (unactedUnits.length === 0) return;
+
+    const currentIdx = selectedUnit
+      ? unactedUnits.findIndex(u => u.id === selectedUnit.id)
+      : -1;
+    const nextIdx = (currentIdx + 1) % unactedUnits.length;
+    const next = unactedUnits[nextIdx];
+    audio.playSelect();
+    setSelectedUnit(next);
+    setTargetingMode(false);
+    setMoveMode(false);
+    setAttackMode(false);
+  }, [state.playerUnits, selectedUnit, audio]);
+
+  // --- Keyboard shortcuts ---
+  useKeyboardShortcuts({
+    onMove: handleEnterMoveMode,
+    onAttack: handleEnterAttackMode,
+    onRepair: handleRepair,
+    onWait: handleWait,
+    onEndTurn: handleEndPlayerPhase,
+    onEscape: handleCloseDetail,
+    onCycleUnit: handleCycleUnit,
+    enabled: state.phase === "playing" && state.turnPhase === "player",
+  });
 
   const waveConfig = useMemo(() => {
     const cfg = WAVE_CONFIGS[state.wave - 1];
@@ -466,100 +418,120 @@ export default function Dashboard() {
       : { name: `第${state.wave}波`, description: "作戦準備中", briefing: "待機せよ。" };
   }, [state.wave]);
 
+  // Facility count for HUD supply display
+  const facilityCount = useMemo(() =>
+    state.playerUnits.filter(u => u.speed === 0 && u.status !== "destroyed").length,
+    [state.playerUnits],
+  );
+
+  const isPlaying = state.phase === "playing" || state.phase === "paused";
+
   return (
     <ThemeContext value={themeValue}>
       <GameContext value={gameValue}>
         <div className="h-screen flex flex-col overflow-hidden bg-bg-deep">
-          <StatusHeader
-            gameWave={state.wave}
-            gameTurn={state.turn}
-            gamePhase={state.phase}
-          />
-
-          <div className="flex-1 flex overflow-hidden min-h-0">
-            <div className="flex-1 flex flex-col min-w-0">
-              <div className="border-b border-border-subtle bg-bg-primary/60 px-5 py-2 shrink-0">
-                <HudKpi data={hudData} />
-              </div>
-              <div className="flex-1 min-h-0 relative">
-                <TacticalMap
-                  onSelectMarker={handleSelectMarker}
-                  onMarkerClick={handleMarkerClick}
-                  markers={playerMarkers}
-                  enemyUnits={state.enemyUnits}
-                  playerUnits={state.playerUnits}
-                  selectedUnitId={selectedUnit?.id ?? null}
-                  targetingMode={targetingMode || attackMode}
-                  turnPhase={state.turnPhase}
-                  onMapClick={handleMapClick}
-                  actedUnitIds={actedUnitIds}
-                >
-                  {state.phase === "playing" || state.phase === "paused" ? (
-                    <GameControls
-                      turn={state.turn}
-                      maxTurns={state.maxTurns}
-                      wave={state.wave}
-                      phase={state.phase}
-                      turnPhase={state.turnPhase}
-                      supply={state.supply}
-                      selectedUnit={selectedUnit}
-                      unactedCount={unactedCount}
-                      canRepair={canRepair}
-                      onMove={handleEnterMoveMode}
-                      onAttack={handleEnterAttackMode}
-                      onRepair={handleRepair}
-                      onWait={handleWait}
-                      onEndPlayerPhase={handleEndPlayerPhase}
-                      onProcessEnemy={() => dispatch({ type: "PROCESS_ENEMY_PHASE" })}
-                      onProcessResolution={() => dispatch({ type: "PROCESS_RESOLUTION" })}
-                      onPause={handlePause}
-                      onResume={handleResume}
-                    />
-                  ) : null}
-                  <UnitDetailPanel
-                    unit={selectedUnit}
-                    onClose={handleCloseDetail}
-                    canRepair={canRepair}
-                    targetName={selectedTargetName}
-                  />
-                  <TargetingOverlay
-                    active={targetingMode || attackMode}
-                    sourceUnit={selectedUnit}
-                    onSelectTarget={(targetId) => {
-                      if (selectedUnit) {
-                        dispatch({ type: "ATTACK_UNIT", unitId: selectedUnit.id, targetId });
-                        setTargetingMode(false);
-                        setAttackMode(false);
-                      }
-                    }}
-                    onCancel={handleCancelTargeting}
-                  />
-                </TacticalMap>
-                {/* Floating damage numbers overlay */}
-                <DamagePopup damages={damageEvents} />
-              </div>
-            </div>
-
-            <SidebarPanels
-              alerts={alerts}
-              workflowCards={workflowCards}
-              chatMessages={chatMessages}
-              onSelectMarker={handleSelectMarker}
-              onAdvanceMission={handleAdvanceMission}
+          {/* Top HUD bar -- slim, always visible during gameplay */}
+          {isPlaying && (
+            <GameHud
+              wave={state.wave}
+              turn={state.turn}
+              maxTurns={state.maxTurns}
+              kpis={state.kpis}
+              supply={state.supply}
+              facilityCount={facilityCount}
+              phase={state.phase}
+              turnPhase={state.turnPhase}
+              onPause={handlePause}
+              onResume={handleResume}
             />
-          </div>
+          )}
 
-          <div className="h-7 border-t border-border-subtle bg-bg-primary/80 backdrop-blur-sm flex items-center px-5 justify-between shrink-0">
-            <div className="readout text-xs text-text-dim flex items-center gap-5">
-              <span className="flex items-center gap-1.5">
-                <span className="w-1.5 h-1.5 rounded-full bg-alert-success" />
-                部隊数 <span className="text-text-secondary">{state.playerUnits.filter(u => u.status !== "destroyed").length}</span>
-              </span>
-              <span>敵勢力 <span className="text-alert-critical">{state.enemyUnits.filter(u => u.status !== "destroyed").length}</span></span>
-            </div>
-            <div className="readout text-xs text-text-dim flex items-center gap-5">
-              <span>MAVEN COMMAND v1.0</span>
-            </div>
+          {/* Full-screen map area with floating overlays */}
+          <div className="flex-1 relative min-h-0">
+            {/* Map fills entire area */}
+            <TacticalMap
+              onSelectMarker={handleSelectMarker}
+              onMarkerClick={handleMarkerClick}
+              markers={playerMarkers}
+              enemyUnits={state.enemyUnits}
+              playerUnits={state.playerUnits}
+              selectedUnitId={selectedUnit?.id ?? null}
+              targetingMode={targetingMode || attackMode}
+              turnPhase={state.turnPhase}
+              onMapClick={handleMapClick}
+              actedUnitIds={actedUnitIds}
+              combatLog={state.log}
+              currentTurn={state.turn}
+            />
+
+            {/* Phase indicator -- top center, floating over map */}
+            {isPlaying && (
+              <PhaseIndicator
+                turnPhase={state.turnPhase}
+                turn={state.turn}
+                unactedCount={unactedCount}
+              />
+            )}
+
+            {/* Unit detail panel -- left side, floating */}
+            <UnitDetailPanel
+              unit={selectedUnit}
+              onClose={handleCloseDetail}
+              canRepair={canRepair}
+              targetName={selectedTargetName}
+            />
+
+            {/* Targeting overlay */}
+            <TargetingOverlay
+              active={targetingMode || attackMode}
+              sourceUnit={selectedUnit}
+              onSelectTarget={(targetId) => {
+                if (selectedUnit) {
+                  audio.playAttack();
+                  dispatch({ type: "ATTACK_UNIT", unitId: selectedUnit.id, targetId });
+                  setTargetingMode(false);
+                  setAttackMode(false);
+                }
+              }}
+              onCancel={handleCancelTargeting}
+            />
+
+            {/* Intel drawer -- right side, collapsible */}
+            {isPlaying && (
+              <IntelDrawer
+                alerts={alerts}
+                missions={workflowCards}
+                messages={chatMessages}
+                onSelectAlert={(id) => handleSelectMarker(id)}
+              />
+            )}
+
+            {/* Floating damage numbers overlay */}
+            <DamagePopup damages={damageEvents} />
+
+            {/* Game controls -- bottom center, floating */}
+            {isPlaying ? (
+              <GameControls
+                turn={state.turn}
+                maxTurns={state.maxTurns}
+                wave={state.wave}
+                phase={state.phase}
+                turnPhase={state.turnPhase}
+                supply={state.supply}
+                selectedUnit={selectedUnit}
+                unactedCount={unactedCount}
+                canRepair={canRepair}
+                onMove={handleEnterMoveMode}
+                onAttack={handleEnterAttackMode}
+                onRepair={handleRepair}
+                onWait={handleWait}
+                onEndPlayerPhase={handleEndPlayerPhase}
+                onProcessEnemy={() => dispatch({ type: "PROCESS_ENEMY_PHASE" })}
+                onProcessResolution={() => dispatch({ type: "PROCESS_RESOLUTION" })}
+                onPause={handlePause}
+                onResume={handleResume}
+              />
+            ) : null}
           </div>
 
           {/* Turn transition flash */}

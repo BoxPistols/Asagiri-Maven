@@ -3,8 +3,9 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { MAP_MARKERS, VEHICLE_ROUTES, type MapMarker, type SeverityLevel } from "@/lib/mock-data";
 import { Layers, Crosshair, Clock, Warehouse, Truck, AlertTriangle, User, Navigation, Swords } from "lucide-react";
-import type { GameUnit, TurnPhase } from "@/lib/game-types";
+import type { GameUnit, TurnPhase, GameLogEntry } from "@/lib/game-types";
 import { getAttackRange } from "@/lib/combat-rules";
+import { getUnitIconSvg } from "@/lib/unit-icons";
 import { useTheme } from "@/hooks/useTheme";
 import dynamic from "next/dynamic";
 
@@ -114,6 +115,17 @@ function MapEventHandler({ onMapClick, onMouseMove }: {
 // Props
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Attack animation types
+// ---------------------------------------------------------------------------
+
+interface AttackLine {
+  id: string;
+  from: [number, number];
+  to: [number, number];
+  timestamp: number;
+}
+
 interface TacticalMapProps {
   onSelectMarker?: (id: string | null) => void;
   onMarkerClick?: (id: string) => void;
@@ -125,6 +137,8 @@ interface TacticalMapProps {
   turnPhase?: TurnPhase;
   onMapClick?: (lat: number, lng: number) => void;
   actedUnitIds?: string[];
+  combatLog?: GameLogEntry[];
+  currentTurn?: number;
   children?: React.ReactNode;
 }
 
@@ -143,6 +157,8 @@ export default function TacticalMap({
   turnPhase,
   onMapClick,
   actedUnitIds = [],
+  combatLog,
+  currentTurn,
   children,
 }: TacticalMapProps) {
   const { theme } = useTheme();
@@ -156,6 +172,14 @@ export default function TacticalMap({
   const [moveTarget, setMoveTarget] = useState<{ lat: number; lng: number } | null>(null);
   const moveTargetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Track previous unit positions for smooth movement animation
+  const prevPositionsRef = useRef<Map<string, [number, number]>>(new Map());
+  const markerRefsMap = useRef<Map<string, unknown>>(new Map());
+
+  // Attack animation state
+  const [attackLines, setAttackLines] = useState<AttackLine[]>([]);
+  const processedLogRef = useRef<Set<string>>(new Set());
+
   useEffect(() => { setMounted(true); }, []);
 
   // Clear move target after 1.5s
@@ -168,6 +192,91 @@ export default function TacticalMap({
       if (moveTargetTimerRef.current) clearTimeout(moveTargetTimerRef.current);
     };
   }, [moveTarget]);
+
+  // ---------------------------------------------------------------------------
+  // Smooth movement: detect position changes and animate markers via Leaflet
+  // ---------------------------------------------------------------------------
+  const allGameUnits = useMemo(() => {
+    const units: GameUnit[] = [];
+    if (playerUnits) units.push(...playerUnits);
+    if (enemyUnits) units.push(...enemyUnits);
+    return units;
+  }, [playerUnits, enemyUnits]);
+
+  useEffect(() => {
+    for (const unit of allGameUnits) {
+      if (unit.status === "destroyed") continue;
+      const prev = prevPositionsRef.current.get(unit.id);
+      const curr: [number, number] = [unit.lat, unit.lng];
+
+      if (prev && (prev[0] !== curr[0] || prev[1] !== curr[1])) {
+        // Position changed — animate the marker if we have a ref
+        const markerRef = markerRefsMap.current.get(unit.id) as
+          | { setLatLng?: (latlng: [number, number]) => void; slideTo?: (latlng: [number, number], opts: { duration: number }) => void }
+          | undefined;
+        if (markerRef) {
+          // leaflet-drift-marker's slideTo if available, otherwise CSS transition handles it
+          if (typeof markerRef.slideTo === "function") {
+            markerRef.slideTo(curr, { duration: 600 });
+          } else if (typeof markerRef.setLatLng === "function") {
+            // CSS transition on .unit-animated class handles the smooth move
+            markerRef.setLatLng(curr);
+          }
+        }
+      }
+      prevPositionsRef.current.set(unit.id, curr);
+    }
+  }, [allGameUnits]);
+
+  // ---------------------------------------------------------------------------
+  // Attack animation: detect new combat log entries and show attack lines
+  // ---------------------------------------------------------------------------
+  useEffect(() => {
+    if (!combatLog || !playerUnits || !enemyUnits) return;
+
+    const allUnits = [...playerUnits, ...enemyUnits];
+    const newLines: AttackLine[] = [];
+
+    for (const entry of combatLog) {
+      if (entry.role !== "combat") continue;
+      if (currentTurn !== undefined && entry.turn !== currentTurn) continue;
+      if (processedLogRef.current.has(entry.id)) continue;
+
+      processedLogRef.current.add(entry.id);
+
+      // Try to find attacker and defender from log content
+      // Combat log format typically: "UnitName attacks TargetName..."
+      // We match any two units mentioned in the content
+      const mentionedUnits = allUnits.filter(
+        u => u.status !== "destroyed" && entry.content.includes(u.name)
+      );
+
+      if (mentionedUnits.length >= 2) {
+        const attacker = mentionedUnits[0];
+        const defender = mentionedUnits[1];
+        newLines.push({
+          id: entry.id,
+          from: [attacker.lat, attacker.lng],
+          to: [defender.lat, defender.lng],
+          timestamp: Date.now(),
+        });
+      }
+    }
+
+    if (newLines.length > 0) {
+      setAttackLines(prev => [...prev, ...newLines]);
+    }
+  }, [combatLog, currentTurn, playerUnits, enemyUnits]);
+
+  // Auto-remove attack lines after 1 second
+  useEffect(() => {
+    if (attackLines.length === 0) return;
+    const timer = setTimeout(() => {
+      const now = Date.now();
+      setAttackLines(prev => prev.filter(l => now - l.timestamp < 1000));
+    }, 1000);
+    return () => clearTimeout(timer);
+  }, [attackLines]);
 
   const baseMarkers = markers ?? MAP_MARKERS;
 
@@ -232,7 +341,7 @@ export default function TacticalMap({
     };
   }, [rangeData, mousePos, selectedPlayerUnit]);
 
-  // Create divIcon for player unit markers with HP bar
+  // Create divIcon for player unit markers with SVG icons
   const createPlayerIcon = useCallback((unit: GameUnit) => {
     if (typeof window === "undefined") return undefined;
     const L = require("leaflet");
@@ -240,89 +349,35 @@ export default function TacticalMap({
     const acted = actedSet.has(unit.id);
     const hpRatio = unit.maxHp > 0 ? unit.hp / unit.maxHp : 0;
     const hpPercent = Math.max(0, Math.round(hpRatio * 100));
-    const hpCol = hpColor(hpRatio);
-    const opacity = acted ? "opacity:0.5;" : "";
 
-    const typeChar = unit.type === "vehicle" ? "V"
-      : unit.type === "drone" ? "D"
-      : unit.type === "ship" ? "S"
-      : unit.type === "infantry" ? "I"
-      : unit.type === "cyber" ? "C"
-      : "?";
-
-    // Determine marker color based on whether it's a facility or mobile
-    const isFacility = unit.id.startsWith("base-");
-    const color = isFacility ? "#34d399" : "#22d3ee";
-
-    const selectedRing = isSelected
-      ? `<span style="position:absolute;width:38px;height:38px;border-radius:50%;border:2px solid #818cf8;opacity:0.9;animation:glow-pulse 2s ease-in-out infinite;"></span>`
-      : "";
-
-    const actedCheck = acted
-      ? `<span style="position:absolute;top:-4px;right:-4px;width:12px;height:12px;border-radius:50%;background:#34d399;display:flex;align-items:center;justify-content:center;font-size:8px;color:#fff;line-height:1;">&#10003;</span>`
-      : "";
+    const svg = getUnitIconSvg(unit.type, "player", hpPercent, acted, isSelected);
+    const actedClass = acted ? " unit-marker-acted" : "";
 
     return L.divIcon({
-      className: "custom-marker",
-      html: `
-        <div style="position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;${opacity}">
-          ${selectedRing}
-          ${actedCheck}
-          <span style="position:relative;display:flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:50%;background:${color}20;border:2px solid ${color};font-family:var(--font-mono);font-size:11px;font-weight:bold;color:${color};">
-            ${typeChar}
-          </span>
-          <div style="width:24px;height:3px;background:#333;margin-top:2px;border-radius:1px;overflow:hidden;">
-            <div style="width:${hpPercent}%;height:100%;background:${hpCol};border-radius:1px;"></div>
-          </div>
-        </div>
-      `,
-      iconSize: [38, 42],
-      iconAnchor: [19, 21],
-      popupAnchor: [0, -21],
+      className: `custom-marker unit-marker unit-marker-player unit-animated${actedClass}`,
+      html: svg,
+      iconSize: [40, 44],
+      iconAnchor: [20, 22],
+      popupAnchor: [0, -24],
     });
   }, [selectedUnitId, actedSet]);
 
-  // Create divIcon for enemy units with HP bar
+  // Create divIcon for enemy units with SVG icons
   const createEnemyIcon = useCallback((unit: GameUnit) => {
     if (typeof window === "undefined") return undefined;
     const L = require("leaflet");
-    const isEngaging = unit.status === "engaging";
-    const isDamaged = unit.status === "damaged";
     const hpRatio = unit.maxHp > 0 ? unit.hp / unit.maxHp : 0;
     const hpPercent = Math.max(0, Math.round(hpRatio * 100));
-    const hpCol = hpColor(hpRatio);
 
-    const typeChar = unit.type === "vehicle" ? "V"
-      : unit.type === "drone" ? "D"
-      : unit.type === "ship" ? "S"
-      : unit.type === "infantry" ? "I"
-      : unit.type === "cyber" ? "C"
-      : "E";
-
-    const color = "#f87171";
-    const pulseClass = isEngaging || isDamaged ? "enemy-pulse-anim" : "";
-    const targetGlow = targetingMode
-      ? "box-shadow:0 0 12px rgba(248,113,113,0.5),0 0 24px rgba(248,113,113,0.2);animation:targeting-enemy-glow 1.5s ease-in-out infinite;"
-      : "";
-    const targetCursor = targetingMode ? "cursor:crosshair;" : "";
+    const svg = getUnitIconSvg(unit.type, "enemy", hpPercent, false, false);
+    const targetCursorClass = targetingMode ? " cursor-crosshair" : "";
 
     return L.divIcon({
-      className: "custom-marker",
-      html: `
-        <div style="position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;${targetCursor}" class="${pulseClass}">
-          <span style="position:absolute;width:36px;height:36px;border-radius:50%;background:${color};opacity:0.15;animation:enemy-pulse 1.8s ease-out infinite;"></span>
-          ${targetingMode ? `<span style="position:absolute;width:42px;height:42px;border-radius:50%;border:2px dashed ${color};opacity:0.7;${targetGlow}"></span>` : ""}
-          <span style="position:relative;display:flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:50%;background:rgba(248,113,113,0.2);border:2px solid ${color};font-family:var(--font-mono);font-size:11px;font-weight:bold;color:${color};">
-            ${typeChar}
-          </span>
-          <div style="width:24px;height:3px;background:#333;margin-top:2px;border-radius:1px;overflow:hidden;">
-            <div style="width:${hpPercent}%;height:100%;background:${hpCol};border-radius:1px;"></div>
-          </div>
-        </div>
-      `,
-      iconSize: [42, 46],
-      iconAnchor: [21, 23],
-      popupAnchor: [0, -23],
+      className: `custom-marker unit-marker unit-marker-enemy unit-animated${targetCursorClass}`,
+      html: svg,
+      iconSize: [40, 44],
+      iconAnchor: [20, 22],
+      popupAnchor: [0, -24],
     });
   }, [targetingMode]);
 
@@ -588,12 +643,17 @@ export default function TacticalMap({
                   />
                 ))}
 
-              {/* === Player unit markers with HP bars === */}
+              {/* === Player unit markers with SVG icons === */}
               {playerUnits?.filter(u => u.status !== "destroyed").map(unit => (
                 <Marker
                   key={`player-${unit.id}`}
                   position={[unit.lat, unit.lng] as [number, number]}
                   icon={createPlayerIcon(unit)}
+                  ref={(ref: unknown) => {
+                    if (ref) {
+                      markerRefsMap.current.set(unit.id, ref);
+                    }
+                  }}
                   eventHandlers={{
                     click: (e: unknown) => {
                       const le = e as { originalEvent?: Event };
@@ -635,12 +695,17 @@ export default function TacticalMap({
                 </Marker>
               ))}
 
-              {/* === Enemy unit markers with HP bars === */}
+              {/* === Enemy unit markers with SVG icons === */}
               {enemyUnits?.filter(u => u.status !== "destroyed").map(unit => (
                 <Marker
                   key={`enemy-${unit.id}`}
                   position={[unit.lat, unit.lng] as [number, number]}
                   icon={createEnemyIcon(unit)}
+                  ref={(ref: unknown) => {
+                    if (ref) {
+                      markerRefsMap.current.set(unit.id, ref);
+                    }
+                  }}
                   eventHandlers={{
                     click: (e: unknown) => {
                       const le = e as { originalEvent?: Event };
@@ -706,6 +771,45 @@ export default function TacticalMap({
                   }}
                 />
               ))}
+
+              {/* === Attack animation lines === */}
+              {attackLines.map(line => {
+                const age = Date.now() - line.timestamp;
+                const opacity = Math.max(0, 0.8 - (age / 1000) * 0.8);
+                return (
+                  <Polyline
+                    key={`atk-${line.id}`}
+                    positions={[line.from, line.to]}
+                    pathOptions={{
+                      color: "#f87171",
+                      weight: 3,
+                      opacity,
+                      dashArray: "8 6",
+                      className: "attack-line-anim",
+                    }}
+                  />
+                );
+              })}
+
+              {/* === Attack impact markers (burst at defender) === */}
+              {attackLines.map(line => {
+                const age = Date.now() - line.timestamp;
+                if (age > 800) return null;
+                return (
+                  <CircleMarker
+                    key={`impact-${line.id}`}
+                    center={line.to}
+                    radius={15 + (age / 800) * 20}
+                    pathOptions={{
+                      color: "#fbbf24",
+                      weight: 2,
+                      opacity: Math.max(0, 0.7 - (age / 800) * 0.7),
+                      fillColor: "#f87171",
+                      fillOpacity: Math.max(0, 0.3 - (age / 800) * 0.3),
+                    }}
+                  />
+                );
+              })}
             </MapContainer>
           </>
         )}

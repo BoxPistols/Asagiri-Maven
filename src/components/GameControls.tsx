@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useCallback } from "react";
-import { Move, Swords, Wrench, Clock, Flag, ChevronRight, Pause, Play, SkipForward, Loader } from "lucide-react";
+import { Move, Swords, Wrench, Clock, Flag, ChevronRight, SkipForward } from "lucide-react";
 import type { GamePhase, GameUnit, TurnPhase } from "@/lib/game-types";
 
 // ---------------------------------------------------------------------------
@@ -34,12 +34,12 @@ interface GameControlsProps {
 // ---------------------------------------------------------------------------
 
 export default function GameControls({
-  turn,
-  maxTurns,
-  wave,
+  turn: _turn,
+  maxTurns: _maxTurns,
+  wave: _wave,
   phase,
   turnPhase,
-  supply,
+  supply: _supply,
   selectedUnit,
   unactedCount,
   canRepair,
@@ -49,18 +49,13 @@ export default function GameControls({
   onWait,
   onEndPlayerPhase,
   onProcessEnemy,
-  onProcessResolution,
-  onPause,
-  onResume,
+  onProcessResolution: _onProcessResolution,
+  onPause: _onPause,
+  onResume: _onResume,
 }: GameControlsProps) {
   const [showEndConfirm, setShowEndConfirm] = useState(false);
 
-  const isPaused = phase === "paused";
-  const isPlaying = phase === "playing";
-
   if (phase !== "playing" && phase !== "paused") return null;
-
-  const turnProgress = maxTurns > 0 ? (turn / maxTurns) * 100 : 0;
 
   // Can act: unit is selected, is player, hasn't acted, not destroyed, has speed > 0
   const canAct = selectedUnit
@@ -84,162 +79,130 @@ export default function GameControls({
   }, []);
 
   return (
-    <div className="game-controls">
-      {/* Turn progress bar */}
-      <div className="absolute top-0 left-0 right-0 h-1 bg-bg-deep/50">
-        <div
-          className="h-full bg-gradient-to-r from-accent-cyan to-accent-indigo transition-all duration-500"
-          style={{ width: `${turnProgress}%` }}
-        />
-      </div>
-
-      <div className="flex items-center gap-2 px-3 py-2.5">
-        {/* Wave + Turn + Supply */}
-        <div className="flex items-center gap-2 readout shrink-0">
-          <div className="flex items-center gap-1 text-xs">
-            <Swords className="w-3.5 h-3.5 text-accent-cyan" />
-            <span className="text-accent-cyan font-bold">W{wave}</span>
-          </div>
-          <div className="h-4 w-px bg-border-subtle" />
-          <div className="flex items-center gap-1 text-xs">
-            <Clock className="w-3.5 h-3.5 text-text-dim" />
-            <span className="text-text-primary font-bold">{turn}</span>
-            <span className="text-text-dim">/{maxTurns}</span>
-          </div>
-          <div className="h-4 w-px bg-border-subtle" />
-          <div className="flex items-center gap-1 text-xs">
-            <span className="text-alert-warning">補給:</span>
-            <span className="text-text-primary font-bold">{supply}</span>
-          </div>
-        </div>
-
-        <div className="h-4 w-px bg-border-subtle" />
-
-        {/* ===== PLAYER PHASE ===== */}
-        {turnPhase === "player" && (
-          <>
-            {/* Action buttons */}
-            <div className="flex items-center gap-1">
-              <button
-                onClick={onMove}
-                disabled={!canAct}
-                className="btn-tactical py-1.5 px-2.5 gap-1 text-xs disabled:opacity-30 disabled:cursor-not-allowed"
-                title="移動"
-              >
-                <Move className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">移動</span>
-              </button>
-
-              <button
-                onClick={onAttack}
-                disabled={!canAct}
-                className="btn-tactical py-1.5 px-2.5 gap-1 text-xs !border-alert-critical/30 !text-alert-critical hover:!bg-alert-critical/10 disabled:opacity-30 disabled:cursor-not-allowed disabled:!border-border-subtle disabled:!text-text-dim"
-                title="攻撃"
-              >
-                <Swords className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">攻撃</span>
-              </button>
-
-              <button
-                onClick={onRepair}
-                disabled={!canAct || !canRepair}
-                className="btn-tactical py-1.5 px-2.5 gap-1 text-xs !border-alert-success/30 !text-alert-success hover:!bg-alert-success/10 disabled:opacity-30 disabled:cursor-not-allowed disabled:!border-border-subtle disabled:!text-text-dim"
-                title="修理"
-              >
-                <Wrench className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">修理</span>
-              </button>
-
-              <button
-                onClick={onWait}
-                disabled={!canAct}
-                className="btn-tactical py-1.5 px-2.5 gap-1 text-xs disabled:opacity-30 disabled:cursor-not-allowed"
-                title="待機"
-              >
-                <Clock className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">待機</span>
-              </button>
-            </div>
-
-            <div className="flex-1" />
-
-            {/* Unacted count */}
-            <div className="readout text-xs text-text-dim shrink-0">
-              残り <span className="text-accent-cyan font-bold">{unactedCount}</span> 部隊未行動
-            </div>
-
-            <div className="h-4 w-px bg-border-subtle" />
-
-            {/* Pause */}
+    <div className="game-controls-floating">
+      {/* ===== PLAYER PHASE ===== */}
+      {turnPhase === "player" && (
+        <div className="flex items-center gap-2 px-3 py-2">
+          {/* Action buttons */}
+          <div className="flex items-center gap-1">
             <button
-              onClick={isPaused ? onResume : onPause}
-              className="btn-tactical py-1.5 px-2"
-              aria-label={isPaused ? "再開" : "一時停止"}
+              onClick={onMove}
+              disabled={!canAct}
+              className="btn-tactical py-1.5 px-2.5 gap-1 text-xs disabled:opacity-30 disabled:cursor-not-allowed"
+              title="移動 [Q]"
             >
-              {isPaused ? <Play className="w-3.5 h-3.5" /> : <Pause className="w-3.5 h-3.5" />}
+              <Move className="w-3.5 h-3.5" />
+              <span>移動</span>
+              <kbd className="ml-0.5 text-[9px] opacity-40 font-mono">Q</kbd>
             </button>
 
-            {/* End turn */}
-            {!showEndConfirm ? (
+            <button
+              onClick={onAttack}
+              disabled={!canAct}
+              className="btn-tactical py-1.5 px-2.5 gap-1 text-xs !border-alert-critical/30 !text-alert-critical hover:!bg-alert-critical/10 disabled:opacity-30 disabled:cursor-not-allowed disabled:!border-border-subtle disabled:!text-text-dim"
+              title="攻撃 [W]"
+            >
+              <Swords className="w-3.5 h-3.5" />
+              <span>攻撃</span>
+              <kbd className="ml-0.5 text-[9px] opacity-40 font-mono">W</kbd>
+            </button>
+
+            <button
+              onClick={onRepair}
+              disabled={!canAct || !canRepair}
+              className="btn-tactical py-1.5 px-2.5 gap-1 text-xs !border-alert-success/30 !text-alert-success hover:!bg-alert-success/10 disabled:opacity-30 disabled:cursor-not-allowed disabled:!border-border-subtle disabled:!text-text-dim"
+              title="修理 [E]"
+            >
+              <Wrench className="w-3.5 h-3.5" />
+              <span>修理</span>
+              <kbd className="ml-0.5 text-[9px] opacity-40 font-mono">E</kbd>
+            </button>
+
+            <button
+              onClick={onWait}
+              disabled={!canAct}
+              className="btn-tactical py-1.5 px-2.5 gap-1 text-xs disabled:opacity-30 disabled:cursor-not-allowed"
+              title="待機 [R]"
+            >
+              <Clock className="w-3.5 h-3.5" />
+              <span>待機</span>
+              <kbd className="ml-0.5 text-[9px] opacity-40 font-mono">R</kbd>
+            </button>
+          </div>
+
+          <div className="h-4 w-px bg-border-subtle" />
+
+          {/* Unacted count */}
+          <div className="readout text-xs text-text-dim shrink-0">
+            残 <span className="text-accent-cyan font-bold">{unactedCount}</span> 部隊
+          </div>
+
+          <div className="h-4 w-px bg-border-subtle" />
+
+          {/* End turn */}
+          {!showEndConfirm ? (
+            <button
+              onClick={handleEndPhase}
+              className="btn-approve py-1.5 px-4 gap-1.5 text-xs"
+            >
+              <Flag className="w-3.5 h-3.5" />
+              終了
+              <kbd className="ml-0.5 text-[9px] opacity-40 font-mono">Space</kbd>
+            </button>
+          ) : (
+            <div className="flex items-center gap-1.5 animate-slide-up">
+              <span className="readout text-xs text-alert-warning">
+                未行動あり
+              </span>
               <button
                 onClick={handleEndPhase}
-                className="btn-approve py-1.5 px-4 gap-1.5 text-xs"
+                className="btn-approve py-1.5 px-3 gap-1 text-xs !bg-alert-warning/20 !border-alert-warning/40 !text-alert-warning"
               >
-                <Flag className="w-3.5 h-3.5" />
-                ターン終了
+                <ChevronRight className="w-3.5 h-3.5" />
+                確認
               </button>
-            ) : (
-              <div className="flex items-center gap-1.5 animate-slide-up">
-                <span className="readout text-xs text-alert-warning">
-                  未行動部隊あり
-                </span>
-                <button
-                  onClick={handleEndPhase}
-                  className="btn-approve py-1.5 px-3 gap-1 text-xs !bg-alert-warning/20 !border-alert-warning/40 !text-alert-warning"
-                >
-                  <ChevronRight className="w-3.5 h-3.5" />
-                  確認
-                </button>
-                <button
-                  onClick={handleCancelEnd}
-                  className="btn-tactical py-1.5 px-2.5 text-xs"
-                >
-                  戻る
-                </button>
-              </div>
-            )}
-          </>
-        )}
-
-        {/* ===== ENEMY PHASE ===== */}
-        {turnPhase === "enemy" && (
-          <>
-            <div className="flex-1 flex items-center justify-center gap-2">
-              <Loader className="w-4 h-4 text-alert-critical animate-spin" />
-              <span className="readout text-sm text-alert-critical tracking-wider">
-                敵フェーズ実行中
-              </span>
+              <button
+                onClick={handleCancelEnd}
+                className="btn-tactical py-1.5 px-2.5 text-xs"
+              >
+                戻る
+              </button>
             </div>
-            <button
-              onClick={onProcessEnemy}
-              className="btn-tactical py-1.5 px-4 gap-1.5 text-xs !border-alert-critical/30 !text-alert-critical"
-            >
-              <SkipForward className="w-3.5 h-3.5" />
-              スキップ
-            </button>
-          </>
-        )}
+          )}
+        </div>
+      )}
 
-        {/* ===== RESOLUTION PHASE ===== */}
-        {turnPhase === "resolution" && (
-          <div className="flex-1 flex items-center justify-center gap-2">
-            <Loader className="w-4 h-4 text-accent-indigo animate-spin" />
-            <span className="readout text-sm text-accent-indigo tracking-wider">
-              結果処理中
-            </span>
+      {/* ===== ENEMY PHASE ===== */}
+      {turnPhase === "enemy" && (
+        <div className="flex items-center gap-3 px-4 py-2">
+          {/* Progress bar */}
+          <div className="flex-1 h-1.5 bg-bg-elevated rounded-full overflow-hidden">
+            <div className="h-full bg-alert-critical rounded-full animate-enemy-progress" />
           </div>
-        )}
-      </div>
+          <span className="readout text-xs text-alert-critical tracking-wider shrink-0">
+            敵フェーズ
+          </span>
+          <button
+            onClick={onProcessEnemy}
+            className="btn-tactical py-1 px-3 gap-1 text-xs !border-alert-critical/30 !text-alert-critical"
+          >
+            <SkipForward className="w-3 h-3" />
+            スキップ
+          </button>
+        </div>
+      )}
+
+      {/* ===== RESOLUTION PHASE ===== */}
+      {turnPhase === "resolution" && (
+        <div className="flex items-center gap-3 px-4 py-2">
+          <div className="flex-1 h-1.5 bg-bg-elevated rounded-full overflow-hidden">
+            <div className="h-full bg-accent-indigo rounded-full animate-enemy-progress" />
+          </div>
+          <span className="readout text-xs text-accent-indigo tracking-wider shrink-0">
+            結果処理中
+          </span>
+        </div>
+      )}
     </div>
   );
 }

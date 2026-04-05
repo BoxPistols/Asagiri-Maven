@@ -361,7 +361,7 @@ body::after {
   animation: enemy-pulse 1.8s ease-out infinite !important;
 }
 
-/* Game controls bar */
+/* Game controls bar (legacy - kept for compat) */
 .game-controls {
   position: absolute;
   bottom: 12px;
@@ -385,6 +385,155 @@ body::after {
   box-shadow:
     0 2px 12px rgba(0, 0, 0, 0.08),
     0 1px 3px rgba(0, 0, 0, 0.04);
+}
+
+/* ========== Full-Screen Map Layout ========== */
+
+/* Game HUD — slim top bar */
+.game-hud {
+  height: 40px;
+  display: flex;
+  align-items: center;
+  padding: 0 12px;
+  background: var(--bg-surface);
+  border-bottom: 1px solid var(--border-subtle);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  z-index: 1200;
+  flex-shrink: 0;
+}
+[data-theme="light"] .game-hud {
+  background: var(--bg-surface);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+}
+
+/* Floating game controls — bottom center */
+.game-controls-floating {
+  position: absolute;
+  bottom: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1100;
+  max-width: 640px;
+  min-width: 320px;
+  background: var(--bg-surface);
+  opacity: 0.96;
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid var(--border-active);
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow:
+    0 0 24px rgba(34, 211, 238, 0.08),
+    0 8px 32px rgba(0, 0, 0, 0.25);
+}
+[data-theme="light"] .game-controls-floating {
+  box-shadow:
+    0 2px 16px rgba(0, 0, 0, 0.1),
+    0 1px 3px rgba(0, 0, 0, 0.04);
+}
+
+/* Enemy progress bar animation */
+@keyframes enemy-progress-fill {
+  0%   { width: 0; }
+  100% { width: 100%; }
+}
+.animate-enemy-progress {
+  animation: enemy-progress-fill 0.8s ease-in-out forwards;
+}
+
+/* Unit detail panel — floating left side */
+.unit-detail-floating {
+  position: absolute;
+  top: 56px;
+  left: 12px;
+  z-index: 1100;
+  width: 220px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-active);
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow:
+    0 0 16px rgba(34,211,238,0.06),
+    0 8px 24px rgba(0,0,0,0.2);
+  animation: slide-in-left 0.2s ease-out;
+}
+[data-theme="light"] .unit-detail-floating {
+  box-shadow:
+    0 2px 12px rgba(0,0,0,0.08),
+    0 1px 3px rgba(0,0,0,0.04);
+}
+
+@keyframes slide-in-left {
+  from { opacity: 0; transform: translateX(-12px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+/* ========== Intel Drawer — Right Side ========== */
+.intel-drawer {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 1050;
+  display: flex;
+  flex-direction: row;
+}
+
+/* Toggle tab handle */
+.intel-tab {
+  position: absolute;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 1060;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 10px 6px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-active);
+  border-right: none;
+  border-radius: 6px 0 0 6px;
+  color: var(--accent-cyan);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  box-shadow: -2px 0 8px rgba(0,0,0,0.15);
+  font-family: var(--font-mono);
+}
+.intel-tab:hover {
+  background: var(--btn-tactical-hover);
+}
+[data-theme="light"] .intel-tab {
+  box-shadow: -1px 0 4px rgba(0,0,0,0.06);
+}
+
+/* Drawer when open — tab moves to inside */
+.intel-drawer-open .intel-tab {
+  right: 350px;
+}
+
+/* Drawer body — slides in */
+.intel-drawer-body {
+  position: absolute;
+  top: 0;
+  right: -350px;
+  width: 350px;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-surface);
+  border-left: 1px solid var(--border-active);
+  box-shadow: -4px 0 16px rgba(0,0,0,0.2);
+  transition: right 0.25s ease-out;
+  overflow: hidden;
+}
+.intel-drawer-open .intel-drawer-body {
+  right: 0;
+}
+[data-theme="light"] .intel-drawer-body {
+  box-shadow: -2px 0 8px rgba(0,0,0,0.06);
 }
 
 /* ========== Visual Effects: Damage & Combat ========== */
@@ -645,4 +794,68 @@ body::after {
 }
 .supply-low-pulse {
   animation: supply-low 2s ease-in-out infinite;
+}
+
+/* ========== Unit Marker Visuals ========== */
+
+/* Unit marker base — ensure clickability */
+.unit-marker {
+  pointer-events: auto !important;
+  cursor: pointer;
+}
+.unit-marker-player {
+  filter: drop-shadow(0 0 3px rgba(34,211,238,0.4));
+}
+.unit-marker-enemy {
+  filter: drop-shadow(0 0 3px rgba(248,113,113,0.5));
+}
+.unit-marker-acted {
+  opacity: 0.55;
+}
+
+/* Smooth marker movement via Leaflet transform */
+.leaflet-marker-icon.unit-animated {
+  transition: transform 0.6s ease-in-out !important;
+}
+
+/* Attack line animation — dashing projectile */
+@keyframes attack-line-dash {
+  to { stroke-dashoffset: -40; }
+}
+.attack-line-anim {
+  animation: attack-line-dash 0.4s linear infinite;
+}
+
+/* Attack impact burst at defender */
+@keyframes attack-impact {
+  0%   { r: 5; opacity: 0.8; fill: #f87171; }
+  50%  { r: 20; opacity: 0.5; fill: #fbbf24; }
+  100% { r: 30; opacity: 0; fill: #fbbf24; }
+}
+
+/* Attack line fade out */
+@keyframes attack-line-fade {
+  0%   { opacity: 0.8; }
+  70%  { opacity: 0.6; }
+  100% { opacity: 0; }
+}
+.attack-line-fade {
+  animation: attack-line-fade 1s ease-out forwards;
+}
+
+/* Range circle animated dash */
+@keyframes range-dash-march {
+  to { stroke-dashoffset: -16; }
+}
+.range-circle-animated path {
+  animation: range-dash-march 1.2s linear infinite;
+}
+
+/* Selected unit pulsing ring on map */
+@keyframes selected-unit-pulse {
+  0%, 100% { stroke-opacity: 0.7; stroke-width: 2; }
+  50%      { stroke-opacity: 0.25; stroke-width: 3; }
+}
+.selected-unit-ring {
+  animation: selected-unit-pulse 2s ease-in-out infinite;
 }
