@@ -2,10 +2,15 @@
 
 import { useEffect, useRef, useState, useCallback } from "react";
 import { PLATEAU_CITIES, DEFAULT_VIEW, CAMERA_PRESETS, type CameraPreset } from "@/lib/plateau-cities";
+import { CESIUM_UI } from "@/lib/cesium-strings";
 import type { GameUnit, TurnPhase } from "@/lib/game-types";
 
 const CESIUM_BASE_URL = "/cesium/";
 const CESIUM_ION_TOKEN = process.env.NEXT_PUBLIC_CESIUM_ION_TOKEN ?? "";
+
+// Memoization cache for SVG billboards (keyed by state tuple)
+const billboardCache = new Map<string, string>();
+const MAX_CACHE_SIZE = 200;
 
 // SVG billboards for units
 function unitBillboardSvg(type: GameUnit["type"] | "base", faction: "player" | "enemy", hpPercent: number, acted: boolean, selected: boolean): string {
@@ -49,6 +54,29 @@ function svgToDataUri(svg: string): string {
   return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
 }
 
+/** Memoized SVG data URI — returns cached URI if state unchanged */
+function getCachedBillboard(
+  type: GameUnit["type"] | "base",
+  faction: "player" | "enemy",
+  hpPercent: number,
+  acted: boolean,
+  selected: boolean,
+): string {
+  // Quantize HP to nearest 5% to reduce cache misses during HP changes
+  const hpBucket = Math.round(hpPercent / 5) * 5;
+  const key = `${faction}:${type}:${hpBucket}:${acted ? 1 : 0}:${selected ? 1 : 0}`;
+  const cached = billboardCache.get(key);
+  if (cached) return cached;
+  // Evict oldest if cache too large
+  if (billboardCache.size >= MAX_CACHE_SIZE) {
+    const firstKey = billboardCache.keys().next().value;
+    if (firstKey) billboardCache.delete(firstKey);
+  }
+  const uri = svgToDataUri(unitBillboardSvg(type, faction, hpBucket, acted, selected));
+  billboardCache.set(key, uri);
+  return uri;
+}
+
 type ViewerType = {
   scene: {
     globe: { enableLighting: boolean; depthTestAgainstTerrain: boolean };
@@ -72,6 +100,13 @@ type ViewerType = {
   destroy: () => void;
 };
 
+export interface AttackTrajectory {
+  id: string;
+  from: { lat: number; lng: number };
+  to: { lat: number; lng: number };
+  timestamp: number;
+}
+
 interface CesiumGameMapProps {
   playerUnits: GameUnit[];
   enemyUnits: GameUnit[];
@@ -81,6 +116,7 @@ interface CesiumGameMapProps {
   onUnitClick: (id: string) => void;
   onMapClick: (lat: number, lng: number) => void;
   focusTarget: { lat: number; lng: number; key: string } | null;
+  attackTrajectories?: AttackTrajectory[];
 }
 
 export default function CesiumGameMap({
@@ -92,9 +128,12 @@ export default function CesiumGameMap({
   onUnitClick,
   onMapClick,
   focusTarget,
+  attackTrajectories = [],
 }: CesiumGameMapProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const viewerRef = useRef<ViewerType | null>(null);
+  const lastBillboardImageRef = useRef<Map<string, string>>(new Map());
+  const lastPositionRef = useRef<Map<string, string>>(new Map());
   const cesiumRef = useRef<typeof import("cesium") | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadedCities, setLoadedCities] = useState(0);
@@ -209,18 +248,26 @@ export default function CesiumGameMap({
       const selected = selectedUnitId === unit.id;
       const isBase = unit.id.startsWith("base-");
       const iconType = isBase ? "base" : unit.type;
-      const svg = unitBillboardSvg(iconType, faction, hpPct, acted, selected);
-      const image = svgToDataUri(svg);
+      const image = getCachedBillboard(iconType, faction, hpPct, acted, selected);
+      const posKey = `${unit.lat.toFixed(6)},${unit.lng.toFixed(6)}`;
       const pos = Cesium.Cartesian3.fromDegrees(unit.lng, unit.lat, 100);
       currentIds.add(unit.id);
 
       const existing = viewer.entities.getById(unit.id) as { position?: { setValue: (v: unknown) => void }; billboard?: { image?: { setValue: (v: unknown) => void } }; label?: { text?: { setValue: (v: string) => void } } } | undefined;
       if (existing) {
-        existing.position?.setValue(pos);
-        existing.billboard?.image?.setValue(image);
-        existing.label?.text?.setValue(unit.name);
+        // Only update properties that actually changed
+        if (lastPositionRef.current.get(unit.id) !== posKey) {
+          existing.position?.setValue(pos);
+          lastPositionRef.current.set(unit.id, posKey);
+        }
+        if (lastBillboardImageRef.current.get(unit.id) !== image) {
+          existing.billboard?.image?.setValue(image);
+          lastBillboardImageRef.current.set(unit.id, image);
+        }
         return;
       }
+      lastPositionRef.current.set(unit.id, posKey);
+      lastBillboardImageRef.current.set(unit.id, image);
       viewer.entities.add({
         id: unit.id,
         position: pos,
@@ -261,8 +308,84 @@ export default function CesiumGameMap({
       const id = (entity as { id: string }).id;
       if (!currentIds.has(id)) toRemove.push(id);
     }
-    for (const id of toRemove) viewer.entities.removeById(id);
+    for (const id of toRemove) {
+      viewer.entities.removeById(id);
+      lastBillboardImageRef.current.delete(id);
+      lastPositionRef.current.delete(id);
+    }
   }, [playerUnits, enemyUnits, selectedUnitId, actedUnitIds]);
+
+  // Attack trajectory arcs — add ballistic curves for combat events
+  useEffect(() => {
+    const viewer = viewerRef.current;
+    const Cesium = cesiumRef.current;
+    if (!viewer || !Cesium || attackTrajectories.length === 0) return;
+
+    const addedIds: string[] = [];
+    const timers: ReturnType<typeof setTimeout>[] = [];
+
+    for (const traj of attackTrajectories) {
+      const arcId = `arc-${traj.id}`;
+      const impactId = `impact-${traj.id}`;
+
+      // Create arc (ballistic curve via 3 waypoints: origin→apex→target)
+      const midLat = (traj.from.lat + traj.to.lat) / 2;
+      const midLng = (traj.from.lng + traj.to.lng) / 2;
+      const distKm = Math.hypot(traj.to.lat - traj.from.lat, traj.to.lng - traj.from.lng) * 111;
+      const apexHeight = Math.min(80_000, Math.max(15_000, distKm * 300)); // altitude-scaled apex
+
+      const positions = [
+        Cesium.Cartesian3.fromDegrees(traj.from.lng, traj.from.lat, 500),
+        Cesium.Cartesian3.fromDegrees(midLng, midLat, apexHeight),
+        Cesium.Cartesian3.fromDegrees(traj.to.lng, traj.to.lat, 500),
+      ];
+
+      // Smooth curve via Catmull-Rom spline
+      const spline = new Cesium.CatmullRomSpline({ times: [0, 0.5, 1], points: positions });
+      const samples: unknown[] = [];
+      for (let t = 0; t <= 1.0001; t += 0.03) {
+        samples.push(spline.evaluate(Math.min(1, t)));
+      }
+
+      viewer.entities.add({
+        id: arcId,
+        polyline: {
+          positions: samples,
+          width: 3,
+          material: Cesium.Color.fromCssColorString("#fbbf24").withAlpha(0.9),
+          clampToGround: false,
+        },
+      });
+      addedIds.push(arcId);
+
+      // Impact ring at target
+      viewer.entities.add({
+        id: impactId,
+        position: Cesium.Cartesian3.fromDegrees(traj.to.lng, traj.to.lat, 100),
+        ellipse: {
+          semiMinorAxis: 3000,
+          semiMajorAxis: 3000,
+          material: Cesium.Color.fromCssColorString("#ef4444").withAlpha(0.3),
+          outline: true,
+          outlineColor: Cesium.Color.fromCssColorString("#ef4444"),
+          heightReference: Cesium.HeightReference.RELATIVE_TO_GROUND,
+        },
+      });
+      addedIds.push(impactId);
+
+      // Auto-cleanup after 2s
+      const timer = setTimeout(() => {
+        viewer.entities.removeById(arcId);
+        viewer.entities.removeById(impactId);
+      }, 2000);
+      timers.push(timer);
+    }
+
+    return () => {
+      for (const t of timers) clearTimeout(t);
+      for (const id of addedIds) viewer.entities.removeById(id);
+    };
+  }, [attackTrajectories]);
 
   // Fly to focus target
   useEffect(() => {
@@ -304,7 +427,7 @@ export default function CesiumGameMap({
       {loading && (
         <div className="absolute inset-0 bg-bg-deep/80 backdrop-blur-sm flex flex-col items-center justify-center z-10">
           <div className="readout text-sm text-accent-cyan uppercase tracking-widest mb-2 animate-pulse-dot">
-            CESIUM エンジン初期化中...
+            {CESIUM_UI.LOADING}
           </div>
         </div>
       )}
@@ -312,7 +435,7 @@ export default function CesiumGameMap({
       {error && (
         <div className="absolute inset-0 bg-bg-deep/90 flex items-center justify-center z-10 p-6">
           <div className="text-center">
-            <div className="readout text-sm text-alert-critical uppercase tracking-widest mb-3">初期化エラー</div>
+            <div className="readout text-sm text-alert-critical uppercase tracking-widest mb-3">{CESIUM_UI.INIT_ERROR}</div>
             <div className="text-xs text-text-secondary max-w-md">{error}</div>
           </div>
         </div>
@@ -322,7 +445,7 @@ export default function CesiumGameMap({
         <>
           <div className="absolute bottom-4 left-4 bg-bg-surface/95 backdrop-blur-md border border-border-subtle rounded-lg px-3 py-1.5 pointer-events-none z-[900]">
             <div className="readout text-xs text-accent-cyan">
-              PLATEAU: {loadedCities}/{PLATEAU_CITIES.length}都市
+              {CESIUM_UI.PLATEAU_LABEL}: {loadedCities}/{PLATEAU_CITIES.length}{CESIUM_UI.PLATEAU_CITY_UNIT}
             </div>
           </div>
 
@@ -334,7 +457,7 @@ export default function CesiumGameMap({
           {/* Camera presets */}
           <div className="absolute top-16 right-3 bg-bg-surface/95 backdrop-blur-md border border-border-subtle rounded-lg overflow-hidden z-[900]">
             <div className="px-3 py-1.5 border-b border-border-subtle">
-              <div className="readout text-xs text-accent-cyan uppercase tracking-wider">カメラ</div>
+              <div className="readout text-xs text-accent-cyan uppercase tracking-wider">{CESIUM_UI.CAMERA_COMPACT}</div>
             </div>
             <div className="p-1 space-y-0.5">
               {CAMERA_PRESETS.map(preset => (

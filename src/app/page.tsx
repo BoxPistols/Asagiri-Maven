@@ -205,6 +205,34 @@ export default function Dashboard() {
     [combatEffects],
   );
 
+  // Attack trajectories for 3D map — parse combat logs from current turn
+  const attackTrajectories = useMemo(() => {
+    const allUnits = [...state.playerUnits, ...state.enemyUnits];
+    const nameToUnit = new Map(allUnits.map(u => [u.name, u]));
+    const trajectories: { id: string; from: { lat: number; lng: number }; to: { lat: number; lng: number }; timestamp: number }[] = [];
+    for (const entry of state.log) {
+      if (entry.role !== "combat" || entry.turn !== state.turn) continue;
+      // Match "attacker → ... defender" pattern
+      const m = entry.content.match(/^(.+?)\s*→\s*(?:敵\s*)?(.+?)\s*(?:に|を)/);
+      if (!m) continue;
+      const attacker = nameToUnit.get(m[1].trim());
+      let defenderKey = m[2].trim();
+      // Try exact match first, then with "敵" prefix
+      let defender = nameToUnit.get(defenderKey);
+      if (!defender) {
+        defender = nameToUnit.get(`敵${defenderKey}`) ?? allUnits.find(u => u.name.includes(defenderKey));
+      }
+      if (!attacker || !defender) continue;
+      trajectories.push({
+        id: entry.id,
+        from: { lat: attacker.lat, lng: attacker.lng },
+        to: { lat: defender.lat, lng: defender.lng },
+        timestamp: Date.now(),
+      });
+    }
+    return trajectories;
+  }, [state.log, state.turn, state.playerUnits, state.enemyUnits]);
+
   // --- Unit selection & interaction modes ---
   const [selectedUnit, setSelectedUnit] = useState<GameUnit | null>(null);
   const [focusTarget, setFocusTarget] = useState<{ lat: number; lng: number; key: string } | null>(null);
@@ -589,6 +617,7 @@ export default function Dashboard() {
                 onUnitClick={handleMarkerClick}
                 onMapClick={handleMapClick}
                 focusTarget={focusTarget}
+                attackTrajectories={attackTrajectories}
               />
             )}
 
