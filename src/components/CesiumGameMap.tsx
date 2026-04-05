@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { PLATEAU_CITIES, DEFAULT_VIEW, CAMERA_PRESETS, type CameraPreset } from "@/lib/plateau-cities";
 import { CESIUM_UI } from "@/lib/cesium-strings";
+import type { CesiumViewer, CesiumEntity, CesiumHandler } from "@/lib/cesium-types";
 import type { GameUnit, TurnPhase } from "@/lib/game-types";
 
 const CESIUM_BASE_URL = "/cesium/";
@@ -77,33 +78,7 @@ function getCachedBillboard(
   return uri;
 }
 
-type ViewerType = {
-  scene: {
-    globe: {
-      enableLighting: boolean;
-      depthTestAgainstTerrain: boolean;
-      terrainExaggeration?: number;
-    };
-    skyAtmosphere: { show: boolean };
-    primitives: { add: (tileset: unknown) => unknown };
-    canvas: HTMLCanvasElement;
-  };
-  camera: {
-    setView: (opts: Record<string, unknown>) => void;
-    flyTo: (opts: Record<string, unknown>) => void;
-    pickEllipsoid?: (position: { x: number; y: number }, ellipsoid?: unknown) => unknown;
-  };
-  cesiumWidget: { creditContainer: { style: { display: string } } };
-  entities: {
-    add: (opts: Record<string, unknown>) => { id: string; [key: string]: unknown };
-    removeById: (id: string) => boolean;
-    getById: (id: string) => unknown;
-    values: unknown[];
-  };
-  clock?: { currentTime: unknown };
-  screenSpaceEventHandler: unknown;
-  destroy: () => void;
-};
+// CesiumViewer replaced by imported CesiumViewer from @/lib/cesium-types
 
 export interface AttackTrajectory {
   id: string;
@@ -136,7 +111,7 @@ export default function CesiumGameMap({
   attackTrajectories = [],
 }: CesiumGameMapProps) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const viewerRef = useRef<ViewerType | null>(null);
+  const viewerRef = useRef<CesiumViewer | null>(null);
   const lastBillboardImageRef = useRef<Map<string, string>>(new Map());
   const lastPositionRef = useRef<Map<string, string>>(new Map());
   const cesiumRef = useRef<typeof import("cesium") | null>(null);
@@ -154,7 +129,7 @@ export default function CesiumGameMap({
     (window as unknown as { CESIUM_BASE_URL: string }).CESIUM_BASE_URL = CESIUM_BASE_URL;
 
     let destroyed = false;
-    let viewer: ViewerType | null = null;
+    let viewer: CesiumViewer | null = null;
     let handlerToDestroy: { destroy: () => void } | null = null;
 
     (async () => {
@@ -170,11 +145,11 @@ export default function CesiumGameMap({
           sceneModePicker: false, baseLayerPicker: false, navigationHelpButton: false,
           fullscreenButton: false, infoBox: false, selectionIndicator: false,
           terrain: Cesium.Terrain.fromWorldTerrain(),
-        }) as unknown as ViewerType;
+        }) as unknown as CesiumViewer;
 
         viewerRef.current = viewer;
         if (viewer.cesiumWidget?.creditContainer) {
-          (viewer.cesiumWidget.creditContainer as unknown as HTMLElement).style.display = "none";
+          viewer.cesiumWidget.creditContainer.style.display = "none";
         }
         viewer.scene.globe.enableLighting = true;
         viewer.scene.globe.depthTestAgainstTerrain = true;
@@ -191,18 +166,16 @@ export default function CesiumGameMap({
 
         // Click handler — pick entity or ground
         const handler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
-        handlerToDestroy = handler as unknown as { destroy: () => void };
+        handlerToDestroy = handler as unknown as CesiumHandler;
         handler.setInputAction((movement: { position: { x: number; y: number } }) => {
-          const picked = viewer!.scene as unknown as { pick: (pos: { x: number; y: number }) => { id?: { id?: string } } | undefined };
-          const pick = picked.pick(movement.position);
+          const pick = viewer!.scene.pick(movement.position);
           if (pick?.id?.id) {
             // Entity clicked
             onUnitClick(pick.id.id);
             return;
           }
           // Ground pick for movement
-          const scene = viewer!.scene as unknown as { pickPosition?: (pos: { x: number; y: number }) => unknown };
-          const cartesian = scene.pickPosition?.(movement.position)
+          const cartesian = viewer!.scene.pickPosition?.(movement.position)
             ?? (viewer!.camera.pickEllipsoid?.(movement.position, Cesium.Ellipsoid.WGS84));
           if (cartesian) {
             const carto = Cesium.Cartographic.fromCartesian(cartesian as InstanceType<typeof Cesium.Cartesian3>);
@@ -263,7 +236,7 @@ export default function CesiumGameMap({
       const pos = Cesium.Cartesian3.fromDegrees(unit.lng, unit.lat, 100);
       currentIds.add(unit.id);
 
-      const existing = viewer.entities.getById(unit.id) as { position?: { setValue: (v: unknown) => void }; billboard?: { image?: { setValue: (v: unknown) => void } }; label?: { text?: { setValue: (v: string) => void } } } | undefined;
+      const existing = viewer.entities.getById(unit.id);
       if (existing) {
         // Only update properties that actually changed
         if (lastPositionRef.current.get(unit.id) !== posKey) {
@@ -315,8 +288,7 @@ export default function CesiumGameMap({
     // Remove entities for units no longer present
     const toRemove: string[] = [];
     for (const entity of viewer.entities.values) {
-      const id = (entity as { id: string }).id;
-      if (!currentIds.has(id)) toRemove.push(id);
+      if (!currentIds.has(entity.id)) toRemove.push(entity.id);
     }
     for (const id of toRemove) {
       viewer.entities.removeById(id);
@@ -402,8 +374,8 @@ export default function CesiumGameMap({
     const viewer = viewerRef.current;
     const Cesium = cesiumRef.current;
     if (!viewer || !Cesium) return;
-    const globe = viewer.scene.globe as unknown as { enableLighting: boolean };
-    const clock = viewer.clock as unknown as { currentTime?: unknown; shouldAnimate?: boolean } | undefined;
+    const globe = viewer.scene.globe;
+    const clock = viewer.clock;
     if (lighting === "auto") {
       globe.enableLighting = true;
       if (clock) clock.shouldAnimate = false;
@@ -428,8 +400,7 @@ export default function CesiumGameMap({
   useEffect(() => {
     const viewer = viewerRef.current;
     if (!viewer) return;
-    const globe = viewer.scene.globe as unknown as { terrainExaggeration?: number };
-    globe.terrainExaggeration = terrainExag;
+    viewer.scene.globe.terrainExaggeration = terrainExag;
   }, [terrainExag]);
 
   // Fly to focus target
