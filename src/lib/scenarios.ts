@@ -45,79 +45,79 @@ function enemy(
 const wave1: WaveConfig = {
   wave: 1,
   name: "偵察",
-  description: "敵偵察ドローンが太平洋側から接近。情報収集と初期対応。",
+  description: "近隣諸国から偵察ドローンが西方・北方から接近。情報収集と初期対応。",
   turns: 4,
   supplyBonus: 30,
   briefing:
-    "敵勢力の偵察活動を確認。小規模ドローンが接近中。まずは状況を把握し、対処してください。",
+    "敵勢力の偵察活動を確認。九州西方(東シナ海)、日本海、北海道北方から小規模ドローンが接近中。まずは状況を把握し、対処してください。",
   intel: [
-    "東京湾東方沖合にて小型飛行体を捕捉。速度から偵察ドローンと推定。",
-    "福岡上空の防空レーダーに微弱反応。低高度飛行の無人機と分析。",
-    "敵ドローンの飛行パターンは典型的な情報収集型。攻撃意図は現時点で低い。",
-    "偵察ドローンの制御信号を傍受。発信源は東方海域の艦艇と推定。",
+    "対馬海峡西方にて小型飛行体を捕捉。速度から偵察ドローンと推定。",
+    "日本海側・能登半島沖の防空レーダーに微弱反応。低高度無人機と分析。",
+    "宗谷海峡方面からの電子機器反応を検知。北方からの偵察活動と推定。",
+    "偵察ドローンの制御信号を傍受。発信源は大陸沿岸の艦艇と推定。",
   ],
   spawnUnits: [
-    // Turn 0 spawn: 3 scout drones
-    enemy(SCOUT_DRONE, 1, 35.35, 140.50, "東京湾東方を低速接近中"),
-    enemy(SCOUT_DRONE, 2, 33.60, 129.50, "福岡西方海上を飛行中"),
-    enemy(SCOUT_DRONE, 3, 34.20, 136.90, "伊勢湾南方から接近中"),
+    // Turn 0: enemies approach from realistic vectors (west and north)
+    enemy(SCOUT_DRONE, 1, 33.30, 128.80, "対馬海峡西方から低空接近中"), // East China Sea / toward Kyushu
+    enemy(SCOUT_DRONE, 2, 37.20, 136.50, "能登半島沖・日本海を南下中"), // Sea of Japan / toward Hokuriku
+    enemy(SCOUT_DRONE, 3, 45.20, 142.00, "宗谷海峡南下・北海道北方"), // North of Hokkaido / Russia direction
   ],
   reinforcements: [
     {
       turn: 2,
       units: [
-        enemy(SCOUT_DRONE, 4, 34.50, 139.80, "伊豆諸島方面から増援"),
-        enemy(SCOUT_DRONE, 5, 33.30, 130.00, "対馬海峡方面から増援"),
-        enemy(COMBAT_DRONE, 6, 35.00, 140.90, "房総沖を低空侵攻中"),
+        enemy(SCOUT_DRONE, 4, 26.80, 127.40, "沖縄本島西方から接近"), // Okinawa direction
+        enemy(SCOUT_DRONE, 5, 35.80, 134.80, "鳥取沖・日本海側"),
+        enemy(COMBAT_DRONE, 6, 33.50, 128.50, "五島列島方面から侵攻"),
       ],
     },
     {
       turn: 4,
       units: [
-        enemy(COMBAT_DRONE, 7, 34.70, 140.20, "伊豆沖を攻撃飛行中"),
-        enemy(COMBAT_DRONE, 8, 33.80, 130.50, "玄界灘を攻撃飛行中"),
+        enemy(COMBAT_DRONE, 7, 38.50, 137.20, "佐渡沖・日本海を侵攻中"),
+        enemy(COMBAT_DRONE, 8, 43.80, 143.50, "オホーツク海から南下中"),
       ],
     },
   ],
   events: [
     {
       type: "recon",
-      title: "偵察ドローン検知: 東京湾沖",
+      title: "偵察ドローン検知: 対馬海峡",
       description:
-        "東京湾入口東方約80kmに小型無人機を探知。低高度で沿岸に接近中。偵察目的と推定される。",
-      severity: "info",
-      score: 30,
-      location: "東京湾沖",
-      lat: 35.35,
-      lng: 140.50,
+        "対馬海峡西方約60kmに小型無人機を探知。九州北岸へ接近中。偵察目的と推定される。",
+      severity: "warning",
+      score: 45,
+      location: "対馬海峡西方",
+      lat: 33.30,
+      lng: 128.80,
       linkedUnitIds: [],
-      suggestedAction: "哨戒ドローンを展開し、監視・迎撃態勢を構築",
+      suggestedAction: "福岡哨戒基地からドローンを展開し、監視・迎撃態勢を構築",
     },
     {
       type: "recon",
-      title: "不明飛行体: 福岡沖",
+      title: "不明飛行体: 能登半島沖",
       description:
-        "福岡西方海上に不明な小型飛行体を確認。東シナ海方面から接近。行動パターンは偵察飛行に一致。",
-      severity: "info",
-      score: 25,
-      location: "福岡西方海上",
-      lat: 33.60,
-      lng: 129.50,
-      linkedUnitIds: [],
-      suggestedAction: "福岡拠点の防空レーダーを最大感度に設定し追跡",
-    },
-    {
-      type: "recon",
-      title: "電波傍受: 不明通信源",
-      description:
-        "太平洋上から発信される暗号通信を傍受。偵察ドローンへの制御信号と推定。敵の母艦が近海に展開している可能性。",
+        "能登半島沖の日本海上に不明な飛行体を確認。大陸沿岸方面から接近。行動パターンは偵察飛行に一致。",
       severity: "warning",
       score: 40,
-      location: "太平洋沖合",
-      lat: 34.50,
-      lng: 141.00,
+      location: "能登半島沖",
+      lat: 37.20,
+      lng: 136.50,
       linkedUnitIds: [],
-      suggestedAction: "信号解析を開始し、敵母艦の位置特定を試みる",
+      suggestedAction: "名古屋前線基地から日本海側へ哨戒機を派遣",
+    },
+    {
+      type: "recon",
+      title: "北方侵入警戒: 宗谷海峡",
+      description:
+        "宗谷海峡南下を確認。北海道北方からの接近は近年稀。諜報任務と推定される。",
+      severity: "warning",
+      score: 42,
+      location: "宗谷海峡",
+      lat: 45.20,
+      lng: 142.00,
+      linkedUnitIds: [],
+      suggestedAction: "札幌補給基地から北方警戒を強化、防空レーダー最大感度",
     },
   ],
 };

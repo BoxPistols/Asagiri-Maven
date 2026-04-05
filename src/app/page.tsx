@@ -4,6 +4,7 @@ import { useCallback, useRef, useState, useMemo, useEffect } from "react";
 import { ThemeContext, useThemeProvider } from "@/hooks/useTheme";
 import { GameContext, useGameProvider } from "@/hooks/useGameEngine";
 import { useCombatEffects } from "@/hooks/useCombatEffects";
+import { useGameBgm } from "@/hooks/useGameBgm";
 import { useGameAudio } from "@/hooks/useGameAudio";
 import { useGameSoundEffects } from "@/hooks/useGameSoundEffects";
 import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
@@ -130,6 +131,7 @@ export default function Dashboard() {
   // --- Audio ---
   const audio = useGameAudio();
   useGameSoundEffects(state, audio);
+  useGameBgm(state.phase, state.turnPhase, audio.muted);
 
   // --- Turn transition state ---
   const prevTurnRef = useRef(state.turn);
