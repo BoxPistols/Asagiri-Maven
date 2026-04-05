@@ -16,12 +16,13 @@ import GameControls from "@/components/GameControls";
 import TurnTransition from "@/components/TurnTransition";
 import DamagePopup, { combatEffectsToDamageEvents } from "@/components/DamagePopup";
 import UnitDetailPanel from "@/components/UnitDetailPanel";
+import ActionLauncher from "@/components/ActionLauncher";
 import TargetingOverlay from "@/components/TargetingOverlay";
 import CombatToast from "@/components/CombatToast";
 import MissionObjectives from "@/components/MissionObjectives";
 import TutorialMode from "@/components/TutorialMode";
 import { WAVE_CONFIGS } from "@/lib/scenarios";
-import { isNearFriendlyFacility } from "@/lib/combat-rules";
+import { isNearFriendlyFacility, getAttackRange } from "@/lib/combat-rules";
 import type {
   GameEvent,
   GameUnit,
@@ -368,13 +369,13 @@ export default function Dashboard() {
     if (state.turnPhase === "enemy") {
       const timer = setTimeout(() => {
         dispatch({ type: "PROCESS_ENEMY_PHASE" });
-      }, 800);
+      }, 2500);
       return () => clearTimeout(timer);
     }
     if (state.turnPhase === "resolution") {
       const timer = setTimeout(() => {
         dispatch({ type: "PROCESS_RESOLUTION" });
-      }, 600);
+      }, 1800);
       return () => clearTimeout(timer);
     }
   }, [state.turnPhase, state.phase, dispatch]);
@@ -404,6 +405,28 @@ export default function Dashboard() {
     if (state.supply < 10) return false;
     return isNearFriendlyFacility(selectedUnit, state.playerUnits);
   }, [selectedUnit, state.playerUnits, state.supply]);
+
+  // Check if selected unit has enemies in attack range
+  const hasNearbyEnemies = useMemo(() => {
+    if (!selectedUnit || selectedUnit.faction !== "player") return false;
+    const range = selectedUnit.range ?? getAttackRange(selectedUnit.type);
+    return state.enemyUnits.some(e => {
+      if (e.status === "destroyed") return false;
+      const dLat = e.lat - selectedUnit.lat;
+      const dLng = e.lng - selectedUnit.lng;
+      const d = Math.sqrt(dLat * dLat + dLng * dLng);
+      return d <= range;
+    });
+  }, [selectedUnit, state.enemyUnits]);
+
+  // Can the selected unit act this turn?
+  const selectedCanAct = useMemo(() => {
+    if (!selectedUnit || selectedUnit.faction !== "player") return false;
+    if (selectedUnit.actedThisTurn) return false;
+    if (selectedUnit.status === "destroyed") return false;
+    if (state.turnPhase !== "player") return false;
+    return true;
+  }, [selectedUnit, state.turnPhase]);
 
   // --- Keyboard shortcut: cycle to next unacted unit ---
   const handleCycleUnit = useCallback(() => {
@@ -519,23 +542,43 @@ export default function Dashboard() {
             {/* Tutorial hint banner */}
             {isPlaying && state.turnPhase === "player" && (
               <div className="absolute top-16 left-1/2 -translate-x-1/2 z-[900] pointer-events-none">
-                <div className="bg-bg-surface/95 backdrop-blur-sm border border-accent-cyan/40 rounded-lg px-4 py-2 shadow-lg">
+                <div className="bg-bg-surface/95 backdrop-blur-sm border border-accent-cyan/40 rounded-lg px-4 py-2 shadow-lg flex items-center gap-3">
                   {!selectedUnit ? (
-                    <p className="text-sm text-text-primary">
-                      <span className="text-accent-cyan font-bold">青い味方</span>
-                      をクリックして選択してください
-                    </p>
-                  ) : selectedUnit.faction === "player" && !selectedUnit.actedThisTurn && (selectedUnit.speed > 0 || (selectedUnit.movePoints ?? 0) > 0) ? (
-                    <p className="text-sm text-text-primary">
-                      <span className="text-alert-critical font-bold">赤い敵</span>をクリック→攻撃 / <span className="text-accent-cyan font-bold">地図</span>をクリック→移動
-                    </p>
+                    <>
+                      <p className="text-sm text-text-primary">
+                        <span className="text-accent-cyan font-bold">青い味方</span>
+                        をクリックして選択
+                      </p>
+                      <span className="h-4 w-px bg-border-subtle" />
+                      <p className="text-xs text-text-secondary">
+                        残り <span className="text-accent-cyan font-bold">{unactedCount}</span> 部隊 · <kbd className="readout text-xs bg-bg-deep px-1.5 py-0.5 rounded border border-border-subtle">Tab</kbd>で次へ
+                      </p>
+                    </>
+                  ) : selectedUnit.faction === "player" && !selectedUnit.actedThisTurn ? (
+                    <>
+                      <p className="text-sm text-text-primary">
+                        {hasNearbyEnemies ? (
+                          <>
+                            <span className="text-alert-critical font-bold">敵を攻撃</span>可能
+                          </>
+                        ) : (
+                          <>
+                            <span className="text-accent-cyan font-bold">地図</span>をクリックで移動
+                          </>
+                        )}
+                      </p>
+                      <span className="h-4 w-px bg-border-subtle" />
+                      <p className="text-xs text-text-secondary">
+                        残り <span className="text-accent-cyan font-bold">{unactedCount}</span> 部隊未行動
+                      </p>
+                    </>
                   ) : selectedUnit.actedThisTurn ? (
                     <p className="text-sm text-text-dim">
-                      このユニットは今ターン行動済み。別のユニットを選択してください。
+                      行動済み · <kbd className="readout text-xs bg-bg-deep px-1.5 py-0.5 rounded border border-border-subtle">Tab</kbd>で次の部隊へ (残り {unactedCount})
                     </p>
                   ) : selectedUnit.faction === "enemy" ? (
                     <p className="text-sm text-alert-critical">
-                      敵ユニット: {selectedUnit.name}
+                      敵: {selectedUnit.name}
                     </p>
                   ) : (
                     <p className="text-sm text-text-dim">待機中</p>
@@ -582,6 +625,21 @@ export default function Dashboard() {
               <MissionObjectives
                 state={state}
                 waveName={waveConfig?.name ?? ""}
+              />
+            )}
+
+            {/* Action launcher popup when a unit is selected */}
+            {isPlaying && (
+              <ActionLauncher
+                unit={selectedUnit}
+                canAct={selectedCanAct}
+                canRepair={canRepair}
+                hasNearbyEnemies={hasNearbyEnemies}
+                onMove={handleEnterMoveMode}
+                onAttack={handleEnterAttackMode}
+                onRepair={handleRepair}
+                onWait={handleWait}
+                onClose={handleCloseDetail}
               />
             )}
 

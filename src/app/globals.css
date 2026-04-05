@@ -324,14 +324,39 @@ body::after {
 .game-card {
   width: 100%;
   max-width: 480px;
+  max-height: calc(100vh - 48px);
   margin: auto 16px;
   background: var(--bg-surface);
   border: 1px solid var(--border-active);
   border-radius: 8px;
+  display: flex;
+  flex-direction: column;
   overflow: hidden;
   box-shadow:
     0 0 40px rgba(34, 211, 238, 0.08),
     0 20px 60px rgba(0, 0, 0, 0.3);
+}
+.game-card-header {
+  flex-shrink: 0;
+  position: sticky;
+  top: 0;
+  background: var(--bg-surface);
+  z-index: 2;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.game-card-body {
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
+}
+.game-card-footer {
+  flex-shrink: 0;
+  position: sticky;
+  bottom: 0;
+  background: var(--bg-surface);
+  z-index: 2;
+  border-top: 1px solid var(--border-subtle);
+  padding: 16px 24px;
 }
 [data-theme="light"] .game-card {
   box-shadow:

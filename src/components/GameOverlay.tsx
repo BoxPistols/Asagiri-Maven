@@ -45,10 +45,12 @@ function BriefingScreen({
 }) {
   return (
     <div className="game-card animate-slide-up" style={{ maxWidth: wave === 1 ? 560 : 480 }}>
-      {/* Top accent */}
-      <div className="h-1 bg-gradient-to-r from-accent-cyan via-accent-indigo to-accent-purple rounded-t-lg" />
+      {/* Sticky top accent */}
+      <div className="game-card-header">
+        <div className="h-1 bg-gradient-to-r from-accent-cyan via-accent-indigo to-accent-purple" />
+      </div>
 
-      <div className="p-6 space-y-5">
+      <div className="game-card-body p-6 space-y-5">
         {/* Wave badge */}
         <div className="flex items-center justify-center gap-3">
           <Swords className="w-5 h-5 text-accent-cyan" />
@@ -168,6 +170,8 @@ function BriefingScreen({
           </>
         )}
 
+      </div>
+      <div className="game-card-footer">
         <button
           onClick={onStart}
           className="btn-approve w-full justify-center text-base py-3 gap-2"
@@ -217,9 +221,11 @@ function VictoryScreen({
 
   return (
     <div className="game-card animate-slide-up">
-      <div className="h-1 bg-gradient-to-r from-alert-success via-accent-cyan to-alert-success rounded-t-lg" />
+      <div className="game-card-header">
+        <div className="h-1 bg-gradient-to-r from-alert-success via-accent-cyan to-alert-success" />
+      </div>
 
-      <div className="p-6 space-y-5">
+      <div className="game-card-body p-6 space-y-5">
         <div className="flex items-center justify-center gap-3">
           <Trophy className="w-6 h-6 text-alert-success" />
           <span className="readout text-xs text-alert-success uppercase tracking-[0.3em]">
@@ -267,6 +273,8 @@ function VictoryScreen({
           <KpiSummaryRow label="情報" value={kpis.intel} icon={<Target className="w-3.5 h-3.5" />} />
         </div>
 
+      </div>
+      <div className="game-card-footer">
         <button
           onClick={onRestart}
           className="btn-tactical w-full justify-center text-base py-3 gap-2"
@@ -306,9 +314,11 @@ function DefeatScreen({
 
   return (
     <div className="game-card animate-slide-up">
-      <div className="h-1 bg-gradient-to-r from-alert-critical via-alert-warning to-alert-critical rounded-t-lg" />
+      <div className="game-card-header">
+        <div className="h-1 bg-gradient-to-r from-alert-critical via-alert-warning to-alert-critical" />
+      </div>
 
-      <div className="p-6 space-y-5">
+      <div className="game-card-body p-6 space-y-5">
         <div className="flex items-center justify-center gap-3">
           <Skull className="w-6 h-6 text-alert-critical" />
           <span className="readout text-xs text-alert-critical uppercase tracking-[0.3em]">
@@ -358,6 +368,8 @@ function DefeatScreen({
           <KpiSummaryRow label="情報" value={kpis.intel} icon={<Target className="w-3.5 h-3.5" />} />
         </div>
 
+      </div>
+      <div className="game-card-footer">
         <button
           onClick={onRestart}
           className="btn-tactical w-full justify-center text-base py-3 gap-2 !border-alert-critical/40 !text-alert-critical hover:!bg-alert-critical/10"
