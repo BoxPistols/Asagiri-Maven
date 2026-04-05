@@ -79,12 +79,26 @@ function BriefingScreen({
           </div>
         )}
 
+        {/* How to play (Wave 1 only) */}
+        {wave === 1 && (
+          <div className="bg-accent-cyan/5 border border-accent-cyan/15 rounded-lg p-4">
+            <div className="readout text-xs text-accent-cyan uppercase tracking-wider mb-2">操作ガイド</div>
+            <ul className="text-xs text-text-secondary space-y-1.5 leading-relaxed">
+              <li>1. ターンが自動進行し、敵が地図上に出現します</li>
+              <li>2. 右パネルに脅威が表示されたら「派遣」で部隊を送ります</li>
+              <li>3. 部隊が敵に接近すると自動で交戦します</li>
+              <li>4. 戦力・物資・士気・情報の4つのKPIを維持してください</li>
+              <li>5. 全5ウェーブを生き残り、最終ボスを撃破すれば勝利</li>
+            </ul>
+          </div>
+        )}
+
         <button
           onClick={onStart}
           className="btn-approve w-full justify-center text-base py-3 gap-2"
         >
           <Play className="w-4 h-4" />
-          開始
+          作戦開始
         </button>
       </div>
     </div>
