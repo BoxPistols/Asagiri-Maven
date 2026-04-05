@@ -18,6 +18,7 @@ import TurnTransition from "@/components/TurnTransition";
 import DamagePopup, { combatEffectsToDamageEvents } from "@/components/DamagePopup";
 import UnitDetailPanel from "@/components/UnitDetailPanel";
 import ActionLauncher from "@/components/ActionLauncher";
+import UnactedUnitsPanel from "@/components/UnactedUnitsPanel";
 import TargetingOverlay from "@/components/TargetingOverlay";
 import CombatToast from "@/components/CombatToast";
 import MissionObjectives from "@/components/MissionObjectives";
@@ -627,6 +628,18 @@ export default function Dashboard() {
               <MissionObjectives
                 state={state}
                 waveName={waveConfig?.name ?? ""}
+              />
+            )}
+
+            {/* Unacted units panel — always visible during player phase */}
+            {isPlaying && state.turnPhase === "player" && (
+              <UnactedUnitsPanel
+                units={state.playerUnits}
+                selectedId={selectedUnit?.id ?? null}
+                onSelectUnit={(unit) => {
+                  audio.playSelect();
+                  setSelectedUnit(unit);
+                }}
               />
             )}
 

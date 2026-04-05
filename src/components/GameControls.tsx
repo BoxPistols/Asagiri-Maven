@@ -134,20 +134,21 @@ export default function GameControls({
 
           {/* Unacted count */}
           <div className="readout text-xs text-text-dim shrink-0">
-            残 <span className="text-accent-cyan font-bold">{unactedCount}</span> 部隊
+            未行動 <span className={`font-bold ${unactedCount === 0 ? "text-alert-success" : "text-accent-cyan"}`}>{unactedCount}</span> 部隊
           </div>
 
           <div className="h-4 w-px bg-border-subtle" />
 
-          {/* End turn */}
+          {/* End turn → transitions to enemy phase */}
           {!showEndConfirm ? (
             <button
               onClick={handleEndPhase}
-              className="btn-approve py-1.5 px-4 gap-1.5 text-xs"
+              className={`btn-approve py-1.5 px-4 gap-1.5 text-xs ${unactedCount === 0 ? "animate-glow-pulse" : ""}`}
+              title="ターン終了 → 敵フェーズへ"
             >
               <Flag className="w-3.5 h-3.5" />
-              終了
-              <kbd className="ml-0.5 text-[9px] opacity-40 font-mono">Space</kbd>
+              {unactedCount === 0 ? "ターン終了→敵へ" : "ターン終了"}
+              <kbd className="ml-0.5 text-[12px] opacity-40 font-mono">Space</kbd>
             </button>
           ) : (
             <div className="flex items-center gap-1.5 animate-slide-up">
