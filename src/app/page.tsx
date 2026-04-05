@@ -203,29 +203,22 @@ export default function Dashboard() {
   }, [dispatch]);
 
   const handleMarkerClick = useCallback((id: string) => {
-    // In attack mode, clicking an enemy dispatches ATTACK_UNIT
-    if (attackMode && selectedUnit) {
-      const isEnemy = state.enemyUnits.some(u => u.id === id && u.status !== "destroyed");
-      if (isEnemy) {
-        audio.playAttack();
-        dispatch({ type: "ATTACK_UNIT", unitId: selectedUnit.id, targetId: id });
-        setAttackMode(false);
-        return;
-      }
+    const isEnemy = state.enemyUnits.some(u => u.id === id && u.status !== "destroyed");
+
+    // If a player unit is selected and can act, and we click an enemy → ATTACK
+    if (selectedUnit
+        && selectedUnit.faction === "player"
+        && !selectedUnit.actedThisTurn
+        && state.turnPhase === "player"
+        && isEnemy) {
+      audio.playAttack();
+      dispatch({ type: "ATTACK_UNIT", unitId: selectedUnit.id, targetId: id });
+      setAttackMode(false);
+      setMoveMode(false);
+      return;
     }
 
-    // In targeting mode (legacy), clicking an enemy completes targeting
-    if (targetingMode && selectedUnit) {
-      const isEnemy = state.enemyUnits.some(u => u.id === id && u.status !== "destroyed");
-      if (isEnemy) {
-        audio.playAttack();
-        dispatch({ type: "ATTACK_UNIT", unitId: selectedUnit.id, targetId: id });
-        setTargetingMode(false);
-        return;
-      }
-    }
-
-    // Normal click: select the unit
+    // Otherwise: select this unit
     const allUnits = [...state.playerUnits, ...state.enemyUnits];
     const unit = allUnits.find(u => u.id === id);
     if (unit) {
@@ -235,16 +228,20 @@ export default function Dashboard() {
       setMoveMode(false);
       setAttackMode(false);
     }
-  }, [attackMode, targetingMode, selectedUnit, state.enemyUnits, state.playerUnits, dispatch, audio]);
+  }, [selectedUnit, state.enemyUnits, state.playerUnits, state.turnPhase, dispatch, audio]);
 
-  // Map click handler (for movement)
+  // Map click: if a player unit is selected, move it there
   const handleMapClick = useCallback((lat: number, lng: number) => {
-    if (moveMode && selectedUnit && !selectedUnit.actedThisTurn && state.turnPhase === "player") {
+    if (selectedUnit
+        && selectedUnit.faction === "player"
+        && !selectedUnit.actedThisTurn
+        && state.turnPhase === "player"
+        && selectedUnit.speed > 0) {
       audio.playMove();
       dispatch({ type: "MOVE_UNIT", unitId: selectedUnit.id, lat, lng });
       setMoveMode(false);
     }
-  }, [moveMode, selectedUnit, state.turnPhase, dispatch, audio]);
+  }, [selectedUnit, state.turnPhase, dispatch, audio]);
 
   // Action mode toggles
   const handleEnterMoveMode = useCallback(() => {
@@ -471,6 +468,34 @@ export default function Dashboard() {
                 turn={state.turn}
                 unactedCount={unactedCount}
               />
+            )}
+
+            {/* Tutorial hint banner */}
+            {isPlaying && state.turnPhase === "player" && (
+              <div className="absolute top-16 left-1/2 -translate-x-1/2 z-[900] pointer-events-none">
+                <div className="bg-bg-surface/95 backdrop-blur-sm border border-accent-cyan/40 rounded-lg px-4 py-2 shadow-lg">
+                  {!selectedUnit ? (
+                    <p className="text-sm text-text-primary">
+                      <span className="text-accent-cyan font-bold">青い味方</span>
+                      をクリックして選択してください
+                    </p>
+                  ) : selectedUnit.faction === "player" && !selectedUnit.actedThisTurn && selectedUnit.speed > 0 ? (
+                    <p className="text-sm text-text-primary">
+                      <span className="text-alert-critical font-bold">赤い敵</span>をクリック→攻撃 / <span className="text-accent-cyan font-bold">地図</span>をクリック→移動
+                    </p>
+                  ) : selectedUnit.actedThisTurn ? (
+                    <p className="text-sm text-text-dim">
+                      このユニットは今ターン行動済み。別のユニットを選択してください。
+                    </p>
+                  ) : selectedUnit.faction === "enemy" ? (
+                    <p className="text-sm text-alert-critical">
+                      敵ユニット: {selectedUnit.name}
+                    </p>
+                  ) : (
+                    <p className="text-sm text-text-dim">待機中</p>
+                  )}
+                </div>
+              </div>
             )}
 
             {/* Unit detail panel -- left side, floating */}

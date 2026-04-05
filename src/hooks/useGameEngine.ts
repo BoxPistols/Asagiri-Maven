@@ -240,12 +240,20 @@ function gameReducer(state: GameState, action: GameAction): GameState {
     case "START_GAME": {
       const initial = createInitialGameState();
       const waveConfig = getWaveConfig(1);
+      // Spawn Wave 1 enemies immediately so player sees threats from turn 1
+      const spawnedEnemies: GameUnit[] = waveConfig.spawnUnits.map((tmpl, i) => ({
+        ...tmpl,
+        id: `enemy-w1-${i}-${uid().slice(0, 6)}`,
+        status: "moving" as const,
+        actedThisTurn: false,
+      }));
       return {
         ...initial,
         phase: "playing",
         turn: 1,
         turnPhase: "player" as const,
         supply: 200,
+        enemyUnits: spawnedEnemies,
         playerUnits: initial.playerUnits.map((u) => ({
           ...u,
           actedThisTurn: false,
@@ -254,7 +262,8 @@ function gameReducer(state: GameState, action: GameAction): GameState {
           ...initial.log,
           makeLog("system", `=== 第${waveConfig.wave}波: ${waveConfig.name} ===`, 1),
           makeLog("intel", waveConfig.briefing, 1),
-          makeLog("system", "--- プレイヤーフェーズ ---", 1),
+          makeLog("intel", `⚠️ 敵部隊 ${spawnedEnemies.length}体を捕捉！`, 1),
+          makeLog("system", "青い味方をクリック → 赤い敵をクリックで攻撃", 1),
         ],
       };
     }

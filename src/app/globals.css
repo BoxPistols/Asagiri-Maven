@@ -451,6 +451,8 @@ body::after {
   left: 12px;
   z-index: 1100;
   width: 220px;
+  max-height: calc(100vh - 180px);
+  overflow-y: auto;
   background: var(--bg-surface);
   border: 1px solid var(--border-active);
   border-radius: 8px;

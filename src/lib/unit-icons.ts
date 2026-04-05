@@ -115,10 +115,11 @@ export function getUnitIconSvg(
   isSelected: boolean = false,
 ): string {
   const isPlayer = faction === "player";
-  const primary = isPlayer ? "#22d3ee" : "#f87171";
-  const glowColor = isPlayer ? "rgba(34,211,238,0.35)" : "rgba(248,113,113,0.4)";
-  const plateBg = isPlayer ? "rgba(11,16,32,0.92)" : "rgba(32,10,10,0.92)";
-  const plateBorder = isPlayer ? "rgba(34,211,238,0.5)" : "rgba(248,113,113,0.55)";
+  // Friendly: clear BLUE with shield. Enemy: intense RED triangular warning
+  const primary = isPlayer ? "#3b82f6" : "#fbbf24";
+  const glowColor = isPlayer ? "rgba(59,130,246,0.5)" : "rgba(239,68,68,0.9)";
+  const plateBg = isPlayer ? "rgba(15,23,42,0.95)" : "rgba(127,12,12,0.98)";
+  const plateBorder = isPlayer ? "#3b82f6" : "#ef4444";
   const hpCol = hpBarColor(hpPercent);
   const hpWidth = Math.max(1, Math.round(36 * hpPercent / 100));
   const clampedHp = Math.max(0, Math.min(100, hpPercent));
@@ -147,41 +148,82 @@ export function getUnitIconSvg(
   // Get the unit shape
   const shapeSvg = (ICON_GENERATORS[type] ?? infantryPath)(primary);
 
+  // ENEMY: triangular warning shape with pulsing red glow
+  if (!isPlayer) {
+    return `<svg xmlns="http://www.w3.org/2000/svg" width="48" height="52" viewBox="0 0 48 52">
+      <defs>
+        <filter id="glow-enemy-${hpWidth}" x="-50%" y="-50%" width="200%" height="200%">
+          <feGaussianBlur stdDeviation="3" result="blur"/>
+          <feComposite in="SourceGraphic" in2="blur" operator="over"/>
+        </filter>
+        <radialGradient id="enemy-pulse-${hpWidth}">
+          <stop offset="0%" stop-color="#ef4444" stop-opacity="0.8"/>
+          <stop offset="100%" stop-color="#ef4444" stop-opacity="0"/>
+        </radialGradient>
+      </defs>
+
+      <!-- Pulsing danger ring -->
+      <circle cx="24" cy="22" r="18" fill="url(#enemy-pulse-${hpWidth})">
+        <animate attributeName="r" values="18;24;18" dur="1.5s" repeatCount="indefinite"/>
+        <animate attributeName="opacity" values="0.6;0;0.6" dur="1.5s" repeatCount="indefinite"/>
+      </circle>
+
+      <!-- Red warning triangle background -->
+      <path d="M 24 4 L 44 38 L 4 38 Z" fill="#7f0c0c" stroke="#ef4444" stroke-width="2.5" filter="url(#glow-enemy-${hpWidth})"/>
+
+      <!-- Inner warning triangle -->
+      <path d="M 24 8 L 40 36 L 8 36 Z" fill="rgba(127,12,12,0.95)" stroke="#fbbf24" stroke-width="1.2"/>
+
+      <!-- Exclamation mark / danger symbol -->
+      <rect x="22" y="14" width="4" height="12" rx="1" fill="#fbbf24"/>
+      <circle cx="24" cy="31" r="2" fill="#fbbf24"/>
+
+      <!-- ENEMY label -->
+      <rect x="8" y="0" width="32" height="8" rx="2" fill="#ef4444"/>
+      <text x="24" y="6" text-anchor="middle" font-family="monospace" font-size="6" font-weight="bold" fill="#fff">ENEMY</text>
+
+      <!-- HP bar background -->
+      <rect x="4" y="42" width="40" height="5" rx="2" fill="rgba(30,30,40,0.9)"/>
+      <rect x="4" y="42" width="${Math.round(40 * hpPercent / 100)}" height="5" rx="2" fill="${hpCol}">
+        ${clampedHp <= 30 ? '<animate attributeName="opacity" values="1;0.4;1" dur="0.8s" repeatCount="indefinite"/>' : ''}
+      </rect>
+
+      ${selectedRing}
+    </svg>`;
+  }
+
+  // PLAYER: friendly blue shield shape
   return `<svg xmlns="http://www.w3.org/2000/svg" width="40" height="44" viewBox="0 0 40 44">
   <defs>
-    <filter id="glow-${faction}" x="-30%" y="-30%" width="160%" height="160%">
+    <filter id="glow-player-${hpWidth}" x="-30%" y="-30%" width="160%" height="160%">
       <feGaussianBlur stdDeviation="2" result="blur"/>
       <feComposite in="SourceGraphic" in2="blur" operator="over"/>
     </filter>
   </defs>
 
-  <!-- Glow background -->
-  <rect x="2" y="2" width="36" height="32" rx="5" ry="5" fill="${glowColor}" filter="url(#glow-${faction})"/>
+  <!-- Blue glow halo -->
+  <circle cx="20" cy="18" r="16" fill="rgba(59,130,246,0.25)" filter="url(#glow-player-${hpWidth})"/>
 
-  <!-- Background plate -->
-  <rect x="1" y="1" width="38" height="34" rx="5" ry="5"
-    fill="${plateBg}" stroke="${plateBorder}" stroke-width="1.2"/>
+  <!-- Shield background -->
+  <path d="M 20 2 L 36 6 L 36 22 Q 36 32 20 36 Q 4 32 4 22 L 4 6 Z"
+    fill="${plateBg}" stroke="${plateBorder}" stroke-width="2"/>
 
-  <!-- Unit shape -->
-  <g transform="translate(0, 1)">
+  <!-- ALLY label -->
+  <rect x="8" y="0" width="24" height="6" rx="1" fill="#3b82f6"/>
+  <text x="20" y="5" text-anchor="middle" font-family="monospace" font-size="5" font-weight="bold" fill="#fff">ALLY</text>
+
+  <!-- Unit shape inside shield -->
+  <g transform="translate(0, 2)">
     ${shapeSvg}
   </g>
 
-  <!-- Faction indicator dot -->
-  <circle cx="${factionDotX}" cy="4" r="2.5" fill="${factionDotColor}" opacity="0.85"/>
-
   <!-- HP bar background -->
   <rect x="2" y="38" width="36" height="4" rx="2" fill="rgba(30,30,40,0.8)"/>
-
-  <!-- HP bar fill -->
-  <rect x="2" y="38" width="${hpWidth}" height="4" rx="2" fill="${hpCol}" opacity="0.9">
-    ${clampedHp <= 30 ? '<animate attributeName="opacity" values="0.9;0.5;0.9" dur="1.5s" repeatCount="indefinite"/>' : ''}
+  <rect x="2" y="38" width="${hpWidth}" height="4" rx="2" fill="${hpCol}" opacity="0.95">
+    ${clampedHp <= 30 ? '<animate attributeName="opacity" values="0.95;0.4;0.95" dur="1.2s" repeatCount="indefinite"/>' : ''}
   </rect>
 
-  <!-- Selected ring -->
   ${selectedRing}
-
-  <!-- Acted overlay -->
   ${actedOverlay}
 </svg>`;
 }
