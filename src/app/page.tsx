@@ -17,6 +17,8 @@ import TurnTransition from "@/components/TurnTransition";
 import DamagePopup, { combatEffectsToDamageEvents } from "@/components/DamagePopup";
 import UnitDetailPanel from "@/components/UnitDetailPanel";
 import TargetingOverlay from "@/components/TargetingOverlay";
+import CombatToast from "@/components/CombatToast";
+import MissionObjectives from "@/components/MissionObjectives";
 import { WAVE_CONFIGS } from "@/lib/scenarios";
 import { isNearFriendlyFacility } from "@/lib/combat-rules";
 import type {
@@ -529,6 +531,19 @@ export default function Dashboard() {
                 messages={chatMessages}
                 onSelectAlert={(id) => handleSelectMarker(id)}
               />
+            )}
+
+            {/* Mission objectives panel - always visible during play */}
+            {isPlaying && (
+              <MissionObjectives
+                state={state}
+                waveName={waveConfig?.name ?? ""}
+              />
+            )}
+
+            {/* Combat result toasts */}
+            {isPlaying && (
+              <CombatToast log={state.log} currentTurn={state.turn} />
             )}
 
             {/* Floating damage numbers overlay */}
