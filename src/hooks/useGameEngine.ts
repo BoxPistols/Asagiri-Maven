@@ -102,7 +102,7 @@ function spawnEvents(state: GameState): { events: GameEvent[]; log: GameLogEntry
   return { events: [...state.events, ...newEvents], log };
 }
 
-/** Spawn enemy units for current wave */
+/** Spawn enemy units for current wave — supports both reinforcements[] and legacy progressive spawn */
 function spawnEnemyUnits(state: GameState): {
   enemyUnits: GameUnit[];
   log: GameLogEntry[];
@@ -110,9 +110,27 @@ function spawnEnemyUnits(state: GameState): {
   const waveConfig = getWaveConfig(state.wave);
   const turnInWave = state.turn - turnStartForWave(state.wave);
   const log: GameLogEntry[] = [];
-
   let units = [...state.enemyUnits];
-  // Progressive spawning: spawn ~2 enemies per turn until all units are deployed
+
+  // --- Priority 1: use WaveConfig.reinforcements if defined ---
+  if (waveConfig.reinforcements && waveConfig.reinforcements.length > 0) {
+    for (const reinforcement of waveConfig.reinforcements) {
+      if (reinforcement.turn !== turnInWave) continue;
+      const spawned: GameUnit[] = reinforcement.units.map((tmpl, i) => ({
+        ...tmpl,
+        id: `enemy-w${state.wave}-rein${reinforcement.turn}-${i}-${uid().slice(0, 6)}`,
+        status: "moving" as const,
+        actedThisTurn: false,
+      }));
+      units = [...units, ...spawned];
+      for (const u of spawned) {
+        log.push(makeLog("intel", `⚠️ 敵増援出現: ${u.name}`, state.turn));
+      }
+    }
+    return { enemyUnits: units, log };
+  }
+
+  // --- Priority 2: fallback to legacy progressive spawn ---
   const totalSpawn = waveConfig.spawnUnits.length;
   const perTurn = Math.max(1, Math.ceil(totalSpawn / Math.max(1, waveConfig.turns - 1)));
   const alreadySpawned = state.enemyUnits.filter(u => u.id.startsWith(`enemy-w${state.wave}-`)).length;
@@ -207,11 +225,18 @@ function checkEndConditions(state: GameState): "victory" | "defeat" | null {
   const kpiValues = Object.values(state.kpis) as number[];
   if (kpiValues.some((v) => v <= 0)) return "defeat";
 
-  // Defeat: any facility destroyed
-  const facilityDestroyed = state.playerUnits.some(
+  // Defeat: 2+ facilities destroyed (immediate defeat)
+  const destroyedFacilities = state.playerUnits.filter(
     (u) => u.id.startsWith("base-") && u.status === "destroyed",
+  ).length;
+  if (destroyedFacilities >= 2) return "defeat";
+
+  // Defeat: all mobile units destroyed (but bases may still stand)
+  const mobileUnits = state.playerUnits.filter(
+    (u) => !u.id.startsWith("base-"),
   );
-  if (facilityDestroyed) return "defeat";
+  const allMobileDead = mobileUnits.length > 0 && mobileUnits.every((u) => u.status === "destroyed");
+  if (allMobileDead) return "defeat";
 
   // Victory: wave 5 complete and boss event resolved
   if (state.wave >= 5) {
@@ -287,10 +312,16 @@ function gameReducer(state: GameState, action: GameAction): GameState {
       if (unit.status === "destroyed") return state;
       if (unit.actedThisTurn) return state;
 
-      // Check destination is within speed range
+      // WC4: compute max range from movePoints × stepDistance, fall back to speed
+      const maxRange = (unit.movePoints !== undefined && unit.stepDistance !== undefined)
+        ? unit.movePoints * unit.stepDistance
+        : unit.speed;
+      if (maxRange <= 0) return state;
+
+      // Check destination is within movement range
       const dest = { lat, lng };
       const d = distance(unit, dest);
-      if (d > unit.speed) return state;
+      if (d > maxRange) return state;
 
       const updatedUnits = state.playerUnits.map((u) =>
         u.id === unitId
@@ -546,15 +577,43 @@ function gameReducer(state: GameState, action: GameAction): GameState {
       const kpis = applyKpiDrain(s);
       s = { ...s, kpis };
 
-      // 5. Supply logistics: -3 per turn cost, +5 per surviving facility
-      const survivingFacilities = s.playerUnits.filter(
-        (u) => u.id.startsWith("base-") && u.status !== "destroyed",
-      ).length;
-      const supplyDelta = survivingFacilities * 5 - 3;
+      // 5. Base HP regen: bases not under attack regenerate +5 HP/turn
+      const regeneratedUnits = s.playerUnits.map((u) => {
+        if (!u.id.startsWith("base-")) return u;
+        if (u.status === "destroyed") return u;
+        if (u.hp >= u.maxHp) return u;
+        // Check no enemies within 0.5 deg
+        const underAttack = s.enemyUnits.some(
+          (e) => e.status !== "destroyed" && distance(e, u) <= 0.5,
+        );
+        if (underAttack) return u;
+        const healedHp = Math.min(u.maxHp, u.hp + 5);
+        return { ...u, hp: healedHp };
+      });
+      s = { ...s, playerUnits: regeneratedUnits };
+
+      // 6. Supply income: per-facility WC4 style (Tokyo +15, Osaka/Nagoya +10, Fukuoka/Sapporo +7)
+      const FACILITY_INCOME: Record<string, number> = {
+        "base-tokyo": 15,
+        "base-osaka": 10,
+        "base-nagoya": 10,
+        "base-fukuoka": 7,
+        "base-sapporo": 7,
+      };
+      let supplyIncome = 0;
+      for (const facility of s.playerUnits) {
+        if (!facility.id.startsWith("base-")) continue;
+        if (facility.status === "destroyed") continue;
+        const baseIncome = FACILITY_INCOME[facility.id] ?? 5;
+        const damaged = facility.hp / facility.maxHp < 0.5;
+        supplyIncome += damaged ? Math.floor(baseIncome / 2) : baseIncome;
+      }
+      const supplyCost = 3; // operational cost
+      const supplyDelta = supplyIncome - supplyCost;
       const newSupply = Math.max(0, s.supply + supplyDelta);
-      s = { ...s, supply: newSupply };
+      s = { ...s, supply: newSupply, supplyIncome };
       allLogs.push(
-        makeLog("system", `補給: ${supplyDelta >= 0 ? "+" : ""}${supplyDelta} (施設×${survivingFacilities}) → 残 ${newSupply}`, s.turn),
+        makeLog("system", `補給: +${supplyIncome} / -${supplyCost} = ${supplyDelta >= 0 ? "+" : ""}${supplyDelta} → 残 ${newSupply}`, s.turn),
       );
 
       // KPI warning

@@ -33,6 +33,8 @@ function enemy(
     attack: template.attack,
     defense: template.defense,
     speed: template.speed,
+    movePoints: template.movePoints,
+    stepDistance: template.stepDistance,
     detail,
   };
 }
@@ -55,13 +57,27 @@ const wave1: WaveConfig = {
     "偵察ドローンの制御信号を傍受。発信源は東方海域の艦艇と推定。",
   ],
   spawnUnits: [
-    // Multiple drones approaching from different directions
+    // Turn 0 spawn: 3 scout drones
     enemy(SCOUT_DRONE, 1, 35.35, 140.50, "東京湾東方を低速接近中"),
     enemy(SCOUT_DRONE, 2, 33.60, 129.50, "福岡西方海上を飛行中"),
     enemy(SCOUT_DRONE, 3, 34.20, 136.90, "伊勢湾南方から接近中"),
-    enemy(COMBAT_DRONE, 4, 35.00, 140.90, "房総沖を低空侵攻中"),
-    enemy(COMBAT_DRONE, 5, 33.30, 130.00, "対馬海峡方面から接近"),
-    enemy(SCOUT_DRONE, 6, 34.50, 139.80, "伊豆諸島方面を偵察中"),
+  ],
+  reinforcements: [
+    {
+      turn: 2,
+      units: [
+        enemy(SCOUT_DRONE, 4, 34.50, 139.80, "伊豆諸島方面から増援"),
+        enemy(SCOUT_DRONE, 5, 33.30, 130.00, "対馬海峡方面から増援"),
+        enemy(COMBAT_DRONE, 6, 35.00, 140.90, "房総沖を低空侵攻中"),
+      ],
+    },
+    {
+      turn: 4,
+      units: [
+        enemy(COMBAT_DRONE, 7, 34.70, 140.20, "伊豆沖を攻撃飛行中"),
+        enemy(COMBAT_DRONE, 8, 33.80, 130.50, "玄界灘を攻撃飛行中"),
+      ],
+    },
   ],
   events: [
     {

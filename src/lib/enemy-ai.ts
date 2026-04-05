@@ -135,8 +135,13 @@ export function moveEnemyUnits(state: GameState): GameUnit[] {
       return { ...enemy, status: "engaging" as const, targetId: bestTarget.id };
     }
 
+    // Use movePoints × stepDistance if available, else fall back to speed
+    const moveRange = (enemy.movePoints !== undefined && enemy.stepDistance !== undefined)
+      ? enemy.movePoints * enemy.stepDistance
+      : enemy.speed;
+
     // Move toward target — stop when in range
-    const step = Math.min(enemy.speed, d - enemyRange * 0.8); // Approach to just inside range
+    const step = Math.min(moveRange, d - enemyRange * 0.8); // Approach to just inside range
     if (step <= 0) {
       return { ...enemy, status: "engaging" as const, targetId: bestTarget.id };
     }
@@ -292,9 +297,23 @@ export interface EnemyTurnResult {
 }
 
 /**
- * Process the entire enemy phase: each enemy either attacks if a target is in
- * range, or moves toward the best target. Returns updated enemy units, updated
- * player units (from enemy attacks), and log messages.
+ * Compute the maximum movement range for an enemy unit, prioritising
+ * WC4-style movePoints × stepDistance, else falling back to legacy speed.
+ */
+function getMoveRange(unit: GameUnit): number {
+  if (unit.movePoints !== undefined && unit.stepDistance !== undefined) {
+    return unit.movePoints * unit.stepDistance;
+  }
+  return unit.speed;
+}
+
+/**
+ * Process the entire enemy phase: each enemy ALWAYS acts (attack or move).
+ * - Prioritises low-HP player units (focus fire)
+ * - Groups up on shared targets
+ * - Retreats if HP < 20% and no targets in range
+ * - Boss (COMMAND_SHIP) hides in the center of its escort cluster
+ * Returns updated enemy units, updated player units (from enemy attacks), and log messages.
  */
 export function processEnemyTurn(state: GameState): EnemyTurnResult {
   const livingPlayerUnits = state.playerUnits.filter(
@@ -308,6 +327,18 @@ export function processEnemyTurn(state: GameState): EnemyTurnResult {
   const enemyResults: GameUnit[] = [];
   const log: string[] = [];
 
+  // Pre-compute: count how many enemies are "near" each player unit for focus-fire targeting
+  const threatCount = new Map<string, number>();
+  for (const target of livingPlayerUnits) {
+    let count = 0;
+    for (const e of state.enemyUnits) {
+      if (e.status === "destroyed") continue;
+      const r = e.range ?? getAttackRange(e.type);
+      if (distance(e, target) <= r + getMoveRange(e)) count++;
+    }
+    threatCount.set(target.id, count);
+  }
+
   for (const enemy of state.enemyUnits) {
     if (enemy.status === "destroyed") {
       enemyResults.push(enemy);
@@ -316,21 +347,32 @@ export function processEnemyTurn(state: GameState): EnemyTurnResult {
 
     const updatedEnemy = { ...enemy };
     const enemyRange = enemy.range ?? getAttackRange(enemy.type);
+    const enemyMoveRange = getMoveRange(enemy);
+    const lowHp = enemy.hp / enemy.maxHp < 0.2;
+    const isBoss = enemy.name.includes("司令艦");
 
-    // --- Smart targeting: prefer units we have type advantage against ---
+    // --- Smart targeting: prefer low-HP units + group fire ---
     let bestTarget: GameUnit | undefined;
     let bestScore = -Infinity;
 
-    // Score living player units from the mutable map (reflects prior damage)
     for (const [, target] of playerMap) {
       if (target.status === "destroyed") continue;
       const d = distance(enemy, target);
       const typeAdv = getTypeAdvantage(enemy.type, target.type);
+      const hpRatio = target.hp / target.maxHp;
 
-      let score = typeAdv * 100;
-      score += Math.max(0, 20 - d * 5);
-      score += (1 - target.hp / target.maxHp) * 30;
-      if (target.id.startsWith("base-")) score += 15;
+      let score = typeAdv * 80;
+      // Proximity — closer is much better
+      score += Math.max(0, 30 - d * 6);
+      // AGGRESSIVELY favor low HP (focus fire on weakened units)
+      score += (1 - hpRatio) * 80;
+      // Critical wound bonus — finish them off
+      if (hpRatio < 0.3) score += 40;
+      // Group-fire bonus: prefer targets already under threat
+      const threats = threatCount.get(target.id) ?? 0;
+      if (threats >= 2) score += 25;
+      // Facility priority (always worth attacking)
+      if (target.id.startsWith("base-")) score += 20;
 
       if (score > bestScore) {
         bestScore = score;
@@ -352,12 +394,63 @@ export function processEnemyTurn(state: GameState): EnemyTurnResult {
       bestTarget = closest;
     }
 
+    // If there are no valid targets at all, unit still MUST act — mark waited and log
     if (!bestTarget) {
+      log.push(`敵${updatedEnemy.name}が待機`);
       enemyResults.push(updatedEnemy);
       continue;
     }
 
     const d = distance(enemy, bestTarget);
+
+    // --- Retreat behavior: low-HP and target not in range → flee ---
+    if (lowHp && d > enemyRange && enemyMoveRange > 0) {
+      // Move AWAY from nearest player unit
+      let nearestPlayer: GameUnit | undefined;
+      let nearestDist = Infinity;
+      for (const [, p] of playerMap) {
+        if (p.status === "destroyed") continue;
+        const pd = distance(enemy, p);
+        if (pd < nearestDist) {
+          nearestDist = pd;
+          nearestPlayer = p;
+        }
+      }
+      if (nearestPlayer && nearestDist > 0) {
+        const ratio = enemyMoveRange / nearestDist;
+        // Move in opposite direction
+        updatedEnemy.lat = enemy.lat - (nearestPlayer.lat - enemy.lat) * ratio;
+        updatedEnemy.lng = enemy.lng - (nearestPlayer.lng - enemy.lng) * ratio;
+        updatedEnemy.status = "moving";
+        updatedEnemy.targetId = undefined;
+        log.push(`敵${updatedEnemy.name}が退却 (HP${Math.round((enemy.hp / enemy.maxHp) * 100)}%)`);
+        enemyResults.push(updatedEnemy);
+        continue;
+      }
+    }
+
+    // --- Boss self-protection: move to centroid of living escorts ---
+    if (isBoss && d > enemyRange && enemyMoveRange > 0) {
+      const escorts = state.enemyUnits.filter(
+        (e) => e.id !== enemy.id && e.status !== "destroyed" && !e.name.includes("司令艦"),
+      );
+      if (escorts.length >= 2) {
+        const cLat = escorts.reduce((s, e) => s + e.lat, 0) / escorts.length;
+        const cLng = escorts.reduce((s, e) => s + e.lng, 0) / escorts.length;
+        const centroidDist = distance(enemy, { lat: cLat, lng: cLng });
+        if (centroidDist > enemyMoveRange * 0.3) {
+          const step = Math.min(enemyMoveRange, centroidDist);
+          const ratio = step / centroidDist;
+          updatedEnemy.lat = enemy.lat + (cLat - enemy.lat) * ratio;
+          updatedEnemy.lng = enemy.lng + (cLng - enemy.lng) * ratio;
+          updatedEnemy.status = "moving";
+          updatedEnemy.targetId = bestTarget.id;
+          log.push(`敵${updatedEnemy.name}が護衛艦隊の中央へ移動`);
+          enemyResults.push(updatedEnemy);
+          continue;
+        }
+      }
+    }
 
     // --- Attack if target is in range ---
     if (d <= enemyRange) {
@@ -371,8 +464,11 @@ export function processEnemyTurn(state: GameState): EnemyTurnResult {
           mutableTarget,
           Array.from(playerMap.values()),
         );
+        // Enemies deal 2x damage vs bases
+        const isBaseTarget = mutableTarget.id.startsWith("base-");
         const result = calculateDamage(updatedEnemy, mutableTarget, nearFacility);
-        mutableTarget.hp = Math.max(0, mutableTarget.hp - result.damage);
+        const finalDamage = isBaseTarget ? Math.floor(result.damage * 2) : result.damage;
+        mutableTarget.hp = Math.max(0, mutableTarget.hp - finalDamage);
 
         const destroyed = mutableTarget.hp <= 0;
         if (destroyed) {
@@ -382,16 +478,20 @@ export function processEnemyTurn(state: GameState): EnemyTurnResult {
         }
 
         log.push(
+          `敵${updatedEnemy.name}が攻撃 — ` +
           formatCombatLog({
             attackerName: updatedEnemy.name,
             defenderName: mutableTarget.name,
-            damage: result.damage,
+            damage: finalDamage,
             advantage: result.advantage,
             critical: result.critical,
             defenderDestroyed: destroyed,
           }),
         );
 
+        if (isBaseTarget) {
+          log.push(`  └ 拠点攻撃ボーナス（×2ダメージ）`);
+        }
         if (result.advantage === "strong") {
           log.push(`  └ 有利な戦闘（${updatedEnemy.type} → ${mutableTarget.type}）`);
         } else if (result.advantage === "weak") {
@@ -404,12 +504,11 @@ export function processEnemyTurn(state: GameState): EnemyTurnResult {
           log.push(`  └ 施設防御ボーナス適用（被ダメ-20%）`);
         }
 
-        // Counter-attack: if the player unit is alive and the enemy is in
-        // the player unit's range, the player unit fires back
+        // Counter-attack
         if (!destroyed && mutableTarget.status !== "destroyed") {
           const playerRange = mutableTarget.range ?? getAttackRange(mutableTarget.type);
           const counterDist = distance(mutableTarget, updatedEnemy);
-          if (counterDist <= playerRange) {
+          if (counterDist <= playerRange && !mutableTarget.id.startsWith("base-")) {
             const counterResult = calculateDamage(mutableTarget, updatedEnemy, false);
             updatedEnemy.hp = Math.max(0, updatedEnemy.hp - counterResult.damage);
             const enemyDestroyed = updatedEnemy.hp <= 0;
@@ -433,18 +532,26 @@ export function processEnemyTurn(state: GameState): EnemyTurnResult {
         }
       }
     } else {
-      // --- Move toward target ---
-      const step = Math.min(enemy.speed, d - enemyRange * 0.8);
-      if (step > 0) {
-        const ratio = step / d;
-        updatedEnemy.lat = enemy.lat + (bestTarget.lat - enemy.lat) * ratio;
-        updatedEnemy.lng = enemy.lng + (bestTarget.lng - enemy.lng) * ratio;
-        updatedEnemy.status = "moving";
-        updatedEnemy.targetId = bestTarget.id;
-        log.push(`${updatedEnemy.name} が ${bestTarget.name} へ接近`);
+      // --- Move toward target (every enemy MUST act) ---
+      if (enemyMoveRange > 0) {
+        const step = Math.min(enemyMoveRange, d - enemyRange * 0.7);
+        if (step > 0) {
+          const ratio = step / d;
+          updatedEnemy.lat = enemy.lat + (bestTarget.lat - enemy.lat) * ratio;
+          updatedEnemy.lng = enemy.lng + (bestTarget.lng - enemy.lng) * ratio;
+          updatedEnemy.status = "moving";
+          updatedEnemy.targetId = bestTarget.id;
+          log.push(`敵${updatedEnemy.name}が移動 — ${bestTarget.name}へ接近`);
+        } else {
+          updatedEnemy.status = "engaging";
+          updatedEnemy.targetId = bestTarget.id;
+          log.push(`敵${updatedEnemy.name}が戦闘準備`);
+        }
       } else {
+        // Static enemy (cyber unit) — engage anyway if in range, else just hold
         updatedEnemy.status = "engaging";
         updatedEnemy.targetId = bestTarget.id;
+        log.push(`敵${updatedEnemy.name}が戦術待機 (静的ユニット)`);
       }
     }
 

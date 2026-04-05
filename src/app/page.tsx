@@ -238,16 +238,21 @@ export default function Dashboard() {
     if (!selectedUnit
         || selectedUnit.faction !== "player"
         || selectedUnit.actedThisTurn
-        || state.turnPhase !== "player"
-        || selectedUnit.speed <= 0) return;
+        || state.turnPhase !== "player") return;
+
+    // WC4: use movePoints × stepDistance, fallback to speed
+    const maxRange = (selectedUnit.movePoints !== undefined && selectedUnit.stepDistance !== undefined && selectedUnit.movePoints > 0)
+      ? selectedUnit.movePoints * selectedUnit.stepDistance
+      : selectedUnit.speed;
+    if (maxRange <= 0) return;
 
     // Check range
     const dLat = lat - selectedUnit.lat;
     const dLng = lng - selectedUnit.lng;
     const dist = Math.sqrt(dLat * dLat + dLng * dLng);
-    if (dist > selectedUnit.speed) {
+    if (dist > maxRange) {
       audio.playError();
-      setDispatchError(`射程外です (${dist.toFixed(2)} > ${selectedUnit.speed})`);
+      setDispatchError(`射程外です (${dist.toFixed(2)} > ${maxRange.toFixed(2)})`);
       setTimeout(() => setDispatchError(null), 2000);
       return;
     }
@@ -366,10 +371,12 @@ export default function Dashboard() {
     }
   }, [state.turnPhase, state.phase, dispatch]);
 
-  // Count unacted mobile player units (speed > 0, not destroyed, not yet acted)
+  // Count unacted mobile player units (has movement capability, not destroyed, not yet acted)
   const unactedCount = useMemo(() =>
     state.playerUnits.filter(u =>
-      u.status !== "destroyed" && u.speed > 0 && !u.actedThisTurn
+      u.status !== "destroyed"
+      && (u.speed > 0 || (u.movePoints ?? 0) > 0)
+      && !u.actedThisTurn
     ).length,
     [state.playerUnits],
   );
@@ -393,7 +400,9 @@ export default function Dashboard() {
   // --- Keyboard shortcut: cycle to next unacted unit ---
   const handleCycleUnit = useCallback(() => {
     const unactedUnits = state.playerUnits.filter(
-      u => u.status !== "destroyed" && u.speed > 0 && !u.actedThisTurn,
+      u => u.status !== "destroyed"
+        && (u.speed > 0 || (u.movePoints ?? 0) > 0)
+        && !u.actedThisTurn,
     );
     if (unactedUnits.length === 0) return;
 
@@ -428,9 +437,9 @@ export default function Dashboard() {
       : { name: `第${state.wave}波`, description: "作戦準備中", briefing: "待機せよ。" };
   }, [state.wave]);
 
-  // Facility count for HUD supply display
+  // Facility count for HUD supply display (base-* units)
   const facilityCount = useMemo(() =>
-    state.playerUnits.filter(u => u.speed === 0 && u.status !== "destroyed").length,
+    state.playerUnits.filter(u => u.id.startsWith("base-") && u.status !== "destroyed").length,
     [state.playerUnits],
   );
 
@@ -492,7 +501,7 @@ export default function Dashboard() {
                       <span className="text-accent-cyan font-bold">青い味方</span>
                       をクリックして選択してください
                     </p>
-                  ) : selectedUnit.faction === "player" && !selectedUnit.actedThisTurn && selectedUnit.speed > 0 ? (
+                  ) : selectedUnit.faction === "player" && !selectedUnit.actedThisTurn && (selectedUnit.speed > 0 || (selectedUnit.movePoints ?? 0) > 0) ? (
                     <p className="text-sm text-text-primary">
                       <span className="text-alert-critical font-bold">赤い敵</span>をクリック→攻撃 / <span className="text-accent-cyan font-bold">地図</span>をクリック→移動
                     </p>

@@ -128,7 +128,7 @@ export default function UnitDetailPanel({
             <span className="readout text-[10px] px-1 py-0.5 rounded" style={{ color: sColor, background: `color-mix(in srgb, ${sColor} 10%, transparent)`, border: `1px solid color-mix(in srgb, ${sColor} 30%, transparent)` }}>
               {statusLabel(unit.status)}
             </span>
-            {isPlayer && unit.speed > 0 && (
+            {isPlayer && (unit.speed > 0 || (unit.movePoints ?? 0) > 0) && (
               <span className={`readout text-[10px] ${unit.actedThisTurn ? "text-alert-success" : "text-accent-cyan"}`}>
                 {unit.actedThisTurn ? "済" : "可"}
               </span>
@@ -170,7 +170,9 @@ export default function UnitDetailPanel({
         </div>
         <div className="flex items-center gap-1 flex-1 justify-center py-1 rounded bg-bg-elevated/50">
           <Gauge className="w-2.5 h-2.5 text-alert-success" />
-          <span className="readout text-[11px] text-text-primary font-bold">{unit.speed}</span>
+          <span className="readout text-[11px] text-text-primary font-bold">
+            {unit.movePoints !== undefined ? `${unit.movePoints}歩` : unit.speed}
+          </span>
         </div>
         <div className="flex items-center gap-1 flex-1 justify-center py-1 rounded bg-bg-elevated/50">
           <Crosshair className="w-2.5 h-2.5 text-alert-warning" />

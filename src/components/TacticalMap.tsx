@@ -312,22 +312,86 @@ export default function TacticalMap({
     return lines;
   }, [playerUnits, enemyUnits]);
 
-  // Range visualisation data
+  // Range visualisation data (WC4-style: movePoints × stepDistance)
   const rangeData = useMemo(() => {
     if (!selectedPlayerUnit) return null;
     if (selectedPlayerUnit.status === "destroyed") return null;
     if (actedSet.has(selectedPlayerUnit.id)) return null;
     if (turnPhase !== "player") return null;
 
-    const moveRange = selectedPlayerUnit.speed;
+    // Use movePoints × stepDistance if available, fallback to speed
+    const movePoints = selectedPlayerUnit.movePoints;
+    const stepDistance = selectedPlayerUnit.stepDistance;
+    const hasSteps = movePoints !== undefined && stepDistance !== undefined && movePoints > 0;
+    const moveRange = hasSteps
+      ? movePoints * stepDistance
+      : selectedPlayerUnit.speed;
     const attackRange = getAttackRange(selectedPlayerUnit.type);
+
+    // Build step markers: one circle per step-count
+    const stepCircles: { radiusM: number; step: number }[] = [];
+    if (hasSteps) {
+      for (let i = 1; i <= movePoints; i++) {
+        stepCircles.push({
+          radiusM: degreesToMeters(i * stepDistance),
+          step: i,
+        });
+      }
+    }
+
     return {
       center: [selectedPlayerUnit.lat, selectedPlayerUnit.lng] as [number, number],
       moveRadiusM: degreesToMeters(moveRange),
       attackRadiusM: degreesToMeters(attackRange),
       moveRangeDeg: moveRange,
+      stepCircles,
+      stepCount: hasSteps ? movePoints : 0,
     };
   }, [selectedPlayerUnit, actedSet, turnPhase]);
+
+  // Enemy danger zones: move + attack range combined
+  const dangerZones = useMemo(() => {
+    if (!enemyUnits) return [];
+    return enemyUnits
+      .filter((u) => u.status !== "destroyed")
+      .map((enemy) => {
+        const attackRange = enemy.range ?? getAttackRange(enemy.type);
+        const hasSteps = enemy.movePoints !== undefined && enemy.stepDistance !== undefined;
+        const moveRange = hasSteps
+          ? (enemy.movePoints ?? 0) * (enemy.stepDistance ?? 0)
+          : enemy.speed;
+        const totalRange = moveRange + attackRange;
+        return {
+          id: enemy.id,
+          center: [enemy.lat, enemy.lng] as [number, number],
+          radiusM: degreesToMeters(totalRange),
+        };
+      });
+  }, [enemyUnits]);
+
+  // Supply lines between bases (within ~6 degrees)
+  const supplyLines = useMemo(() => {
+    if (!playerUnits) return [];
+    const bases = playerUnits.filter(
+      (u) => u.id.startsWith("base-") && u.status !== "destroyed",
+    );
+    const lines: { id: string; from: [number, number]; to: [number, number] }[] = [];
+    for (let i = 0; i < bases.length; i++) {
+      for (let j = i + 1; j < bases.length; j++) {
+        const a = bases[i];
+        const b = bases[j];
+        const d = distanceDeg(a, b);
+        if (d <= 6) {
+          lines.push({
+            id: `supply-${a.id}-${b.id}`,
+            from: [a.lat, a.lng],
+            to: [b.lat, b.lng],
+          });
+        }
+      }
+    }
+    return lines;
+  }, [playerUnits]);
 
   // Movement path preview data
   const pathPreview = useMemo(() => {
@@ -342,6 +406,7 @@ export default function TacticalMap({
   }, [rangeData, mousePos, selectedPlayerUnit]);
 
   // Create divIcon for player unit markers with SVG icons
+  // Bases render larger with a distinctive ring to stand out from mobile units
   const createPlayerIcon = useCallback((unit: GameUnit) => {
     if (typeof window === "undefined") return undefined;
     const L = require("leaflet");
@@ -349,6 +414,30 @@ export default function TacticalMap({
     const acted = actedSet.has(unit.id);
     const hpRatio = unit.maxHp > 0 ? unit.hp / unit.maxHp : 0;
     const hpPercent = Math.max(0, Math.round(hpRatio * 100));
+    const isBase = unit.id.startsWith("base-");
+
+    if (isBase) {
+      // Larger, more distinctive base marker
+      const coreColor = hpPercent > 60 ? "#22d3ee" : hpPercent > 30 ? "#fbbf24" : "#f87171";
+      const selectedGlow = isSelected
+        ? `box-shadow: 0 0 0 3px rgba(34,211,238,0.7), 0 0 22px rgba(34,211,238,0.45);`
+        : `box-shadow: 0 0 0 2px rgba(34,211,238,0.35), 0 0 12px rgba(34,211,238,0.25);`;
+      const html = `
+        <div style="position:relative;display:flex;align-items:center;justify-content:center;width:52px;height:52px;">
+          <div style="position:absolute;width:52px;height:52px;border-radius:14px;background:linear-gradient(135deg,#0f172a 0%,#1e293b 100%);border:2px solid ${coreColor};${selectedGlow};display:flex;align-items:center;justify-content:center;">
+            <span style="font-family:var(--font-mono);font-size:20px;font-weight:900;color:${coreColor};text-shadow:0 0 4px rgba(0,0,0,0.8);">★</span>
+          </div>
+          <div style="position:absolute;bottom:-6px;left:50%;transform:translateX(-50%);background:${coreColor};color:#0f172a;font-family:var(--font-mono);font-size:9px;font-weight:bold;padding:1px 4px;border-radius:2px;letter-spacing:0.5px;">HQ ${hpPercent}%</div>
+        </div>
+      `;
+      return L.divIcon({
+        className: `custom-marker unit-marker unit-marker-base`,
+        html,
+        iconSize: [52, 58],
+        iconAnchor: [26, 26],
+        popupAnchor: [0, -28],
+      });
+    }
 
     const svg = getUnitIconSvg(unit.type, "player", hpPercent, acted, isSelected);
     const actedClass = acted ? " unit-marker-acted" : "";
@@ -431,16 +520,22 @@ export default function TacticalMap({
     setLayers(prev => ({ ...prev, [key]: !prev[key] }));
   }, []);
 
-  // Handle map click (for movement)
+  // Handle map click (for movement) - uses WC4 movePoints × stepDistance
   const handleMapContainerClick = useCallback((e: unknown) => {
     // e is a Leaflet MouseEvent with latlng
     const le = e as { latlng?: { lat: number; lng: number } };
     if (!le.latlng) return;
     const { lat, lng } = le.latlng;
 
-    if (selectedPlayerUnit && !actedSet.has(selectedPlayerUnit.id) && turnPhase === "player" && selectedPlayerUnit.speed > 0) {
+    if (selectedPlayerUnit && !actedSet.has(selectedPlayerUnit.id) && turnPhase === "player") {
+      const movePoints = selectedPlayerUnit.movePoints;
+      const stepDistance = selectedPlayerUnit.stepDistance;
+      const maxRange = (movePoints !== undefined && stepDistance !== undefined && movePoints > 0)
+        ? movePoints * stepDistance
+        : selectedPlayerUnit.speed;
+      if (maxRange <= 0) return;
       const dist = distanceDeg(selectedPlayerUnit, { lat, lng });
-      if (dist <= selectedPlayerUnit.speed) {
+      if (dist <= maxRange) {
         setMoveTarget({ lat, lng });
         onMapClick?.(lat, lng);
       } else {
@@ -532,22 +627,71 @@ export default function TacticalMap({
                 />
               ))}
 
+              {/* === Danger zones: enemy attack+move reach (red tint) === */}
+              {dangerZones.map(zone => (
+                <Circle
+                  key={`danger-${zone.id}`}
+                  center={zone.center}
+                  radius={zone.radiusM}
+                  pathOptions={{
+                    color: "#ef4444",
+                    weight: 0.8,
+                    opacity: 0.15,
+                    fillColor: "#ef4444",
+                    fillOpacity: 0.035,
+                    dashArray: "2 6",
+                  }}
+                />
+              ))}
+
+              {/* === Supply lines between friendly bases (thin cyan) === */}
+              {supplyLines.map(line => (
+                <Polyline
+                  key={line.id}
+                  positions={[line.from, line.to]}
+                  pathOptions={{
+                    color: "#22d3ee",
+                    weight: 1,
+                    opacity: 0.22,
+                    dashArray: "3 8",
+                  }}
+                />
+              ))}
+
               {/* === Range circles (when player unit selected, hasn't acted, player phase) === */}
               {rangeData && (
                 <>
-                  {/* Movement range: dashed cyan */}
-                  <Circle
-                    center={rangeData.center}
-                    radius={rangeData.moveRadiusM}
-                    pathOptions={{
-                      color: "#22d3ee",
-                      weight: 1.5,
-                      opacity: 0.5,
-                      fillColor: "#22d3ee",
-                      fillOpacity: 0.06,
-                      dashArray: "8 6",
-                    }}
-                  />
+                  {/* Step markers: one circle per movePoint */}
+                  {rangeData.stepCircles.map(s => (
+                    <Circle
+                      key={`step-${s.step}`}
+                      center={rangeData.center}
+                      radius={s.radiusM}
+                      pathOptions={{
+                        color: s.step === rangeData.stepCount ? "#22d3ee" : "#22d3ee",
+                        weight: s.step === rangeData.stepCount ? 1.8 : 0.8,
+                        opacity: s.step === rangeData.stepCount ? 0.6 : 0.3,
+                        fillColor: "#22d3ee",
+                        fillOpacity: s.step === rangeData.stepCount ? 0.06 : 0,
+                        dashArray: s.step === rangeData.stepCount ? "8 6" : "2 6",
+                      }}
+                    />
+                  ))}
+                  {/* Fallback: plain move range when no step data (legacy units) */}
+                  {rangeData.stepCircles.length === 0 && (
+                    <Circle
+                      center={rangeData.center}
+                      radius={rangeData.moveRadiusM}
+                      pathOptions={{
+                        color: "#22d3ee",
+                        weight: 1.5,
+                        opacity: 0.5,
+                        fillColor: "#22d3ee",
+                        fillOpacity: 0.06,
+                        dashArray: "8 6",
+                      }}
+                    />
+                  )}
                   {/* Attack range: dotted red */}
                   <Circle
                     center={rangeData.center}
@@ -555,9 +699,9 @@ export default function TacticalMap({
                     pathOptions={{
                       color: "#f87171",
                       weight: 1.5,
-                      opacity: 0.3,
+                      opacity: 0.4,
                       fillColor: "#f87171",
-                      fillOpacity: 0.03,
+                      fillOpacity: 0.04,
                       dashArray: "4 4",
                     }}
                   />

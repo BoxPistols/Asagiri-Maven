@@ -57,12 +57,12 @@ export default function GameControls({
 
   if (phase !== "playing" && phase !== "paused") return null;
 
-  // Can act: unit is selected, is player, hasn't acted, not destroyed, has speed > 0
+  // Can act: unit is selected, is player, hasn't acted, not destroyed, has movement
   const canAct = selectedUnit
     && selectedUnit.faction === "player"
     && !selectedUnit.actedThisTurn
     && selectedUnit.status !== "destroyed"
-    && selectedUnit.speed > 0
+    && (selectedUnit.speed > 0 || (selectedUnit.movePoints ?? 0) > 0)
     && turnPhase === "player";
 
   const handleEndPhase = useCallback(() => {

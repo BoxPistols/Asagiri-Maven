@@ -23,7 +23,9 @@ export interface GameUnit {
   maxHp: number;
   attack: number;
   defense: number;
-  speed: number;       // map units per turn
+  speed: number;       // legacy map units per turn (fallback)
+  movePoints?: number; // WC4-style step count per turn (e.g. 2 for drones)
+  stepDistance?: number; // how far one step goes in degrees (~0.5 default)
   status: "idle" | "moving" | "engaging" | "damaged" | "destroyed";
   targetId?: string;   // mission or enemy id
   detail: string;
@@ -60,6 +62,11 @@ export interface Mission {
   outcome?: "success" | "failure" | "partial";
 }
 
+export interface WaveReinforcement {
+  turn: number;  // turn within the wave (0-indexed)
+  units: Omit<GameUnit, "id" | "status" | "actedThisTurn">[];
+}
+
 export interface WaveConfig {
   wave: number;
   name: string;
@@ -67,6 +74,7 @@ export interface WaveConfig {
   turns: number;       // how many turns this wave lasts
   events: Omit<GameEvent, "id" | "turn" | "resolved">[];
   spawnUnits: Omit<GameUnit, "id" | "status" | "actedThisTurn">[];
+  reinforcements?: WaveReinforcement[]; // timed reinforcement waves
   briefing: string;    // AI chat message at wave start
   intel: string[];     // periodic intel messages
   supplyBonus: number; // supply awarded on wave clear
@@ -79,6 +87,7 @@ export interface GameState {
   maxTurns: number;    // total turns across all waves
   turnPhase: TurnPhase;
   supply: number;      // resource pool, used for repairs/reinforcements
+  supplyIncome?: number; // computed supply generated per turn
   kpis: GameKpis;
   playerUnits: GameUnit[];
   enemyUnits: GameUnit[];
