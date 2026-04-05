@@ -955,42 +955,98 @@ export default function TacticalMap({
                 />
               ))}
 
-              {/* === Attack animation lines === */}
+              {/* === Attack trajectory (bright glowing line) === */}
               {attackLines.map(line => {
                 const age = Date.now() - line.timestamp;
-                const opacity = Math.max(0, 0.8 - (age / 1000) * 0.8);
+                const opacity = Math.max(0, 0.9 - (age / 1200) * 0.9);
                 return (
-                  <Polyline
-                    key={`atk-${line.id}`}
-                    positions={[line.from, line.to]}
+                  <g key={`atk-trail-${line.id}`}>
+                    {/* Outer glow */}
+                    <Polyline
+                      positions={[line.from, line.to]}
+                      pathOptions={{
+                        color: "#fbbf24",
+                        weight: 8,
+                        opacity: opacity * 0.3,
+                      }}
+                    />
+                    {/* Main beam */}
+                    <Polyline
+                      positions={[line.from, line.to]}
+                      pathOptions={{
+                        color: "#fef3c7",
+                        weight: 2.5,
+                        opacity,
+                      }}
+                    />
+                  </g>
+                );
+              })}
+
+              {/* === Muzzle flash at attacker === */}
+              {attackLines.map(line => {
+                const age = Date.now() - line.timestamp;
+                if (age > 300) return null;
+                const pct = age / 300;
+                return (
+                  <CircleMarker
+                    key={`muzzle-${line.id}`}
+                    center={line.from}
+                    radius={8 + pct * 6}
                     pathOptions={{
-                      color: "#f87171",
-                      weight: 3,
-                      opacity,
-                      dashArray: "8 6",
-                      className: "attack-line-anim",
+                      color: "#fbbf24",
+                      weight: 2,
+                      opacity: 1 - pct,
+                      fillColor: "#fef3c7",
+                      fillOpacity: (1 - pct) * 0.6,
                     }}
                   />
                 );
               })}
 
-              {/* === Attack impact markers (burst at defender) === */}
+              {/* === Triple impact rings at defender === */}
               {attackLines.map(line => {
                 const age = Date.now() - line.timestamp;
-                if (age > 800) return null;
+                if (age > 1000) return null;
+                const pct = age / 1000;
                 return (
-                  <CircleMarker
-                    key={`impact-${line.id}`}
-                    center={line.to}
-                    radius={15 + (age / 800) * 20}
-                    pathOptions={{
-                      color: "#fbbf24",
-                      weight: 2,
-                      opacity: Math.max(0, 0.7 - (age / 800) * 0.7),
-                      fillColor: "#f87171",
-                      fillOpacity: Math.max(0, 0.3 - (age / 800) * 0.3),
-                    }}
-                  />
+                  <g key={`impact-${line.id}`}>
+                    {/* Inner burst */}
+                    <CircleMarker
+                      center={line.to}
+                      radius={4 + pct * 14}
+                      pathOptions={{
+                        color: "#ef4444",
+                        weight: 0,
+                        fillColor: "#fef3c7",
+                        fillOpacity: Math.max(0, 0.8 - pct * 0.8),
+                      }}
+                    />
+                    {/* Middle shockwave */}
+                    <CircleMarker
+                      center={line.to}
+                      radius={10 + pct * 30}
+                      pathOptions={{
+                        color: "#fbbf24",
+                        weight: 3,
+                        opacity: Math.max(0, 0.8 - pct * 0.8),
+                        fillColor: "#f87171",
+                        fillOpacity: Math.max(0, 0.15 - pct * 0.15),
+                      }}
+                    />
+                    {/* Outer shockwave */}
+                    <CircleMarker
+                      center={line.to}
+                      radius={18 + pct * 50}
+                      pathOptions={{
+                        color: "#ef4444",
+                        weight: 1.5,
+                        opacity: Math.max(0, 0.5 - pct * 0.5),
+                        fillOpacity: 0,
+                        dashArray: "4 4",
+                      }}
+                    />
+                  </g>
                 );
               })}
             </MapContainer>
