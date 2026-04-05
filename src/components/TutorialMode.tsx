@@ -116,7 +116,7 @@ export default function TutorialMode({ onComplete, onSkip }: TutorialModeProps) 
   const progress = ((stepIdx + 1) / TUTORIAL_STEPS.length) * 100;
 
   return (
-    <div className="fixed inset-0 z-[10000] bg-bg-deep/95 backdrop-blur-md flex flex-col items-center justify-center p-4">
+    <div className="fixed inset-0 z-[10000] bg-bg-deep/95 backdrop-blur-md flex flex-col items-center justify-center p-4 overflow-hidden">
       {/* Progress bar */}
       <div className="absolute top-0 left-0 right-0 h-1 bg-bg-surface">
         <div
@@ -139,19 +139,23 @@ export default function TutorialMode({ onComplete, onSkip }: TutorialModeProps) 
         TUTORIAL — Step {stepIdx + 1} / {TUTORIAL_STEPS.length}
       </div>
 
-      {/* Main card */}
-      <div className="max-w-lg w-full bg-bg-surface border-2 border-accent-cyan/30 rounded-xl p-8 shadow-2xl animate-slide-up" key={stepIdx}>
-        {/* Icon */}
-        <div className="flex justify-center mb-4">
-          <div className="w-20 h-20 rounded-full bg-accent-cyan/10 border-2 border-accent-cyan/30 flex items-center justify-center text-accent-cyan">
-            {step.icon}
+      {/* Main card — sticky header/footer with scrollable body */}
+      <div className="max-w-lg w-full max-h-[calc(100vh-160px)] bg-bg-surface border-2 border-accent-cyan/30 rounded-xl shadow-2xl animate-slide-up flex flex-col overflow-hidden" key={stepIdx}>
+        {/* Sticky header */}
+        <div className="flex-shrink-0 pt-6 pb-2 px-8 border-b border-border-subtle bg-bg-surface">
+          <div className="flex justify-center mb-3">
+            <div className="w-16 h-16 rounded-full bg-accent-cyan/10 border-2 border-accent-cyan/30 flex items-center justify-center text-accent-cyan">
+              {step.icon}
+            </div>
           </div>
+          <h2 className="text-xl font-bold text-text-primary text-center">
+            {step.title}
+          </h2>
         </div>
-
-        {/* Title */}
-        <h2 className="text-2xl font-bold text-text-primary text-center mb-3">
-          {step.title}
-        </h2>
+        {/* Scrollable body */}
+        <div className="flex-1 overflow-y-auto p-6 min-h-0">
+        {/* Title — removed from body, placed in header */}
+        <h2 className="hidden">{step.title}</h2>
 
         {/* Description */}
         <p className="text-sm text-text-secondary text-center leading-relaxed mb-6">
@@ -240,23 +244,26 @@ export default function TutorialMode({ onComplete, onSkip }: TutorialModeProps) 
           </div>
         )}
 
-        {/* Next button */}
-        <button
-          onClick={handleNext}
-          className="btn-approve w-full justify-center text-base py-3 gap-2"
-        >
-          {isLast ? (
-            <>
-              <Play className="w-4 h-4" />
-              作戦開始
-            </>
-          ) : (
-            <>
-              <ChevronRight className="w-4 h-4" />
-              次へ
-            </>
-          )}
-        </button>
+        </div>
+        {/* Sticky footer */}
+        <div className="flex-shrink-0 p-4 border-t border-border-subtle bg-bg-surface">
+          <button
+            onClick={handleNext}
+            className="btn-approve w-full justify-center text-base py-3 gap-2"
+          >
+            {isLast ? (
+              <>
+                <Play className="w-4 h-4" />
+                作戦開始
+              </>
+            ) : (
+              <>
+                <ChevronRight className="w-4 h-4" />
+                次へ
+              </>
+            )}
+          </button>
+        </div>
       </div>
 
       {/* Auto-play indicator */}

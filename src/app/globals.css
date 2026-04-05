@@ -309,13 +309,13 @@ body::after {
   inset: 0;
   z-index: 10000;
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: center;
   background: rgba(7, 11, 21, 0.85);
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
-  overflow-y: auto;
-  padding: 24px 0;
+  padding: 24px 16px;
+  overflow: hidden;
 }
 [data-theme="light"] .game-overlay {
   background: rgba(248, 250, 252, 0.88);
@@ -324,8 +324,7 @@ body::after {
 .game-card {
   width: 100%;
   max-width: 480px;
-  max-height: calc(100vh - 48px);
-  margin: auto 16px;
+  max-height: 100%;
   background: var(--bg-surface);
   border: 1px solid var(--border-active);
   border-radius: 8px;
@@ -338,21 +337,16 @@ body::after {
 }
 .game-card-header {
   flex-shrink: 0;
-  position: sticky;
-  top: 0;
   background: var(--bg-surface);
   z-index: 2;
-  border-bottom: 1px solid var(--border-subtle);
 }
 .game-card-body {
-  flex: 1;
+  flex: 1 1 auto;
   overflow-y: auto;
   min-height: 0;
 }
 .game-card-footer {
   flex-shrink: 0;
-  position: sticky;
-  bottom: 0;
   background: var(--bg-surface);
   z-index: 2;
   border-top: 1px solid var(--border-subtle);

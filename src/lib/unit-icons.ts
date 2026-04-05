@@ -174,9 +174,10 @@ export function getUnitIconSvg(
       <!-- Inner warning triangle -->
       <path d="M 24 8 L 40 36 L 8 36 Z" fill="rgba(127,12,12,0.95)" stroke="#fbbf24" stroke-width="1.2"/>
 
-      <!-- Exclamation mark / danger symbol -->
-      <rect x="22" y="14" width="4" height="12" rx="1" fill="#fbbf24"/>
-      <circle cx="24" cy="31" r="2" fill="#fbbf24"/>
+      <!-- Unit type shape in center (matches player icons) -->
+      <g transform="translate(4, 6) scale(0.8)">
+        ${(ICON_GENERATORS[type] ?? infantryPath)("#fbbf24")}
+      </g>
 
       <!-- ENEMY label -->
       <rect x="8" y="0" width="32" height="8" rx="2" fill="#ef4444"/>
