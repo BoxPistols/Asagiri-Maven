@@ -9,7 +9,10 @@ import { useGameAudio } from "@/hooks/useGameAudio";
 import { useGameSoundEffects } from "@/hooks/useGameSoundEffects";
 import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
 import GameHud from "@/components/GameHud";
+import SettingsPanel from "@/components/SettingsPanel";
 import TacticalMap from "@/components/TacticalMap";
+import dynamic from "next/dynamic";
+const CesiumGameMap = dynamic(() => import("@/components/CesiumGameMap"), { ssr: false });
 import PhaseIndicator from "@/components/PhaseIndicator";
 import IntelDrawer from "@/components/IntelDrawer";
 import GameOverlay from "@/components/GameOverlay";
@@ -27,6 +30,7 @@ import MissionObjectives from "@/components/MissionObjectives";
 import TutorialMode from "@/components/TutorialMode";
 import ReinforcementAlert from "@/components/ReinforcementAlert";
 import { useScreenShake } from "@/hooks/useScreenShake";
+import { useTooltipSettings } from "@/hooks/useTooltipSettings";
 import { WAVE_CONFIGS } from "@/lib/scenarios";
 import { isNearFriendlyFacility, getAttackRange } from "@/lib/combat-rules";
 import type {
@@ -131,13 +135,13 @@ export default function Dashboard() {
   const themeValue = useThemeProvider();
   const gameValue = useGameProvider();
   const { state, dispatch } = gameValue;
-  const [, setSelectedMarker] = useState<string | null>(null);
 
   // --- Audio ---
   const audio = useGameAudio();
   useGameSoundEffects(state, audio);
   useGameBgm(state.phase, state.turnPhase, audio.muted);
   const isShaking = useScreenShake(state.playerUnits);
+  const tooltipSettings = useTooltipSettings();
 
   // --- Turn transition state ---
   const prevTurnRef = useRef(state.turn);
@@ -203,6 +207,34 @@ export default function Dashboard() {
     [combatEffects],
   );
 
+  // Attack trajectories for 3D map — parse combat logs from current turn
+  const attackTrajectories = useMemo(() => {
+    const allUnits = [...state.playerUnits, ...state.enemyUnits];
+    const nameToUnit = new Map(allUnits.map(u => [u.name, u]));
+    const trajectories: { id: string; from: { lat: number; lng: number }; to: { lat: number; lng: number }; timestamp: number }[] = [];
+    for (const entry of state.log) {
+      if (entry.role !== "combat" || entry.turn !== state.turn) continue;
+      // Match "attacker → ... defender" pattern
+      const m = entry.content.match(/^(.+?)\s*→\s*(?:敵\s*)?(.+?)\s*(?:に|を)/);
+      if (!m) continue;
+      const attacker = nameToUnit.get(m[1].trim());
+      let defenderKey = m[2].trim();
+      // Try exact match first, then with "敵" prefix
+      let defender = nameToUnit.get(defenderKey);
+      if (!defender) {
+        defender = nameToUnit.get(`敵${defenderKey}`) ?? allUnits.find(u => u.name.includes(defenderKey));
+      }
+      if (!attacker || !defender) continue;
+      trajectories.push({
+        id: entry.id,
+        from: { lat: attacker.lat, lng: attacker.lng },
+        to: { lat: defender.lat, lng: defender.lng },
+        timestamp: Date.now(),
+      });
+    }
+    return trajectories;
+  }, [state.log, state.turn, state.playerUnits, state.enemyUnits]);
+
   // --- Unit selection & interaction modes ---
   const [selectedUnit, setSelectedUnit] = useState<GameUnit | null>(null);
   const [focusTarget, setFocusTarget] = useState<{ lat: number; lng: number; key: string } | null>(null);
@@ -222,6 +254,18 @@ export default function Dashboard() {
   const [dispatchError, setDispatchError] = useState<string | null>(null);
   // Start false to avoid hydration mismatch; enable on client via useEffect
   const [showTutorial, setShowTutorial] = useState<boolean>(false);
+  const [mapView, setMapView] = useState<"2d" | "3d">("2d");
+  useEffect(() => {
+    const saved = localStorage.getItem("maven-map-view");
+    if (saved === "3d") setMapView("3d");
+  }, []);
+  const toggleMapView = useCallback(() => {
+    setMapView(prev => {
+      const next = prev === "2d" ? "3d" : "2d";
+      localStorage.setItem("maven-map-view", next);
+      return next;
+    });
+  }, []);
   useEffect(() => {
     if (localStorage.getItem("maven-tutorial-done") !== "true") {
       setShowTutorial(true);
@@ -232,7 +276,6 @@ export default function Dashboard() {
   const [attackMode, setAttackMode] = useState(false);
 
   const handleSelectMarker = useCallback((id: string | null) => {
-    setSelectedMarker(id);
     if (id) dispatch({ type: "SELECT_UNIT", unitId: id });
   }, [dispatch]);
 
@@ -541,27 +584,52 @@ export default function Dashboard() {
               turnPhase={state.turnPhase}
               onPause={handlePause}
               onResume={handleResume}
+              mapView={mapView}
+              onToggleView={toggleMapView}
+              settingsSlot={
+                <SettingsPanel
+                  tooltipMode={tooltipSettings.mode}
+                  onTooltipModeChange={tooltipSettings.setMode}
+                  audioMuted={audio.muted}
+                  onToggleAudio={audio.toggleMute}
+                />
+              }
             />
           )}
 
           {/* Full-screen map area with floating overlays */}
           <div className="flex-1 relative min-h-0">
             {/* Map fills entire area */}
-            <TacticalMap
-              onSelectMarker={handleSelectMarker}
-              onMarkerClick={handleMarkerClick}
-              markers={playerMarkers}
-              enemyUnits={state.enemyUnits}
-              playerUnits={state.playerUnits}
-              selectedUnitId={selectedUnit?.id ?? null}
-              targetingMode={targetingMode || attackMode}
-              turnPhase={state.turnPhase}
-              onMapClick={handleMapClick}
-              actedUnitIds={actedUnitIds}
-              combatLog={state.log}
-              currentTurn={state.turn}
-              focusTarget={focusTarget}
-            />
+            {mapView === "2d" ? (
+              <TacticalMap
+                onSelectMarker={handleSelectMarker}
+                onMarkerClick={handleMarkerClick}
+                markers={playerMarkers}
+                enemyUnits={state.enemyUnits}
+                playerUnits={state.playerUnits}
+                selectedUnitId={selectedUnit?.id ?? null}
+                targetingMode={targetingMode || attackMode}
+                turnPhase={state.turnPhase}
+                onMapClick={handleMapClick}
+                actedUnitIds={actedUnitIds}
+                combatLog={state.log}
+                currentTurn={state.turn}
+                focusTarget={focusTarget}
+                tooltipAutoCloseMs={tooltipSettings.mode === "auto" ? tooltipSettings.autoCloseMs : 0}
+              />
+            ) : (
+              <CesiumGameMap
+                playerUnits={state.playerUnits}
+                enemyUnits={state.enemyUnits}
+                selectedUnitId={selectedUnit?.id ?? null}
+                actedUnitIds={actedUnitIds}
+                turnPhase={state.turnPhase}
+                onUnitClick={handleMarkerClick}
+                onMapClick={handleMapClick}
+                focusTarget={focusTarget}
+                attackTrajectories={attackTrajectories}
+              />
+            )}
 
             {/* Phase indicator -- top center, floating over map */}
             {isPlaying && (
@@ -653,32 +721,28 @@ export default function Dashboard() {
               />
             )}
 
-            {/* Mission objectives panel - always visible during play */}
-            {isPlaying && (
-              <MissionObjectives
-                state={state}
-                waveName={waveConfig?.name ?? ""}
-              />
-            )}
-
-            {/* Map legend (collapsible) */}
+            {/* Map legend (collapsible, bottom-left) */}
             {isPlaying && <MapLegend />}
 
-            {/* MAVEN AI Assistant — situation analysis & action suggestions */}
+            {/* Unified right sidebar: stacked collapsible panels */}
             {isPlaying && (
-              <MavenAiAssistant
-                state={state}
-                onSelectUnit={selectAndFocus}
-              />
-            )}
-
-            {/* Unacted units panel — always visible during player phase */}
-            {isPlaying && state.turnPhase === "player" && (
-              <UnactedUnitsPanel
-                units={state.playerUnits}
-                selectedId={selectedUnit?.id ?? null}
-                onSelectUnit={selectAndFocus}
-              />
+              <div className="absolute top-20 right-3 z-[950] w-64 flex flex-col gap-2 max-h-[calc(100vh-180px)] overflow-y-auto pr-0.5 pointer-events-none [&>*]:pointer-events-auto">
+                {state.turnPhase === "player" && (
+                  <UnactedUnitsPanel
+                    units={state.playerUnits}
+                    selectedId={selectedUnit?.id ?? null}
+                    onSelectUnit={selectAndFocus}
+                  />
+                )}
+                <MissionObjectives
+                  state={state}
+                  waveName={waveConfig?.name ?? ""}
+                />
+                <MavenAiAssistant
+                  state={state}
+                  onSelectUnit={selectAndFocus}
+                />
+              </div>
             )}
 
             {/* Action launcher popup when a unit is selected */}

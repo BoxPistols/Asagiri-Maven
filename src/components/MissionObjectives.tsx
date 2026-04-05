@@ -1,6 +1,7 @@
 "use client";
 
-import { Target, Skull, Shield, Trophy, Clock } from "lucide-react";
+import { useState } from "react";
+import { Target, Skull, Shield, Trophy, Clock, ChevronDown, ChevronUp } from "lucide-react";
 import type { GameState } from "@/lib/game-types";
 
 interface MissionObjectivesProps {
@@ -55,15 +56,21 @@ function buildObjectives(state: GameState): Objective[] {
 }
 
 export default function MissionObjectives({ state, waveName }: MissionObjectivesProps) {
+  const [open, setOpen] = useState(true);
   const objectives = buildObjectives(state);
   const kpiDanger = Object.entries(state.kpis).find(([, v]) => v <= 30);
 
   return (
-    <div className="absolute bottom-16 right-3 z-[1000] w-64 bg-bg-surface/95 backdrop-blur-md border border-border-active rounded-lg overflow-hidden shadow-xl pointer-events-auto">
-      <div className="panel-header !py-2 !text-xs">
+    <div className="w-full bg-bg-surface/95 backdrop-blur-md border border-border-active rounded-lg overflow-hidden shadow-xl pointer-events-auto">
+      <button
+        onClick={() => setOpen(o => !o)}
+        className="w-full panel-header !py-2 !text-xs hover:bg-bg-elevated/30 transition-colors"
+      >
         <Target className="w-3.5 h-3.5" />
         任務目標
-      </div>
+        <span className="ml-auto">{open ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}</span>
+      </button>
+      {open && (
       <div className="px-3 py-2.5">
         <div className="flex items-center gap-2 mb-2.5 pb-2 border-b border-border-subtle">
           <Clock className="w-3.5 h-3.5 text-accent-cyan" />
@@ -128,6 +135,7 @@ export default function MissionObjectives({ state, waveName }: MissionObjectives
           </div>
         )}
       </div>
+      )}
     </div>
   );
 }

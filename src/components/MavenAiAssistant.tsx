@@ -56,7 +56,7 @@ export default function MavenAiAssistant({ state, onSelectUnit }: MavenAiAssista
   const SUGGESTED = ["脅威は?", "残り何体?", "補給状況は?", "どうすれば?"];
 
   return (
-    <div className="absolute top-[340px] right-3 z-[950] w-64 bg-bg-surface/95 backdrop-blur-md border border-accent-purple/30 rounded-lg overflow-hidden shadow-xl pointer-events-auto">
+    <div className="w-full bg-bg-surface/95 backdrop-blur-md border border-accent-purple/30 rounded-lg overflow-hidden shadow-xl pointer-events-auto">
       {/* Header */}
       <button
         onClick={() => setOpen(o => !o)}
@@ -139,9 +139,14 @@ export default function MavenAiAssistant({ state, onSelectUnit }: MavenAiAssista
             onClick={() => setChatOpen(o => !o)}
             className="w-full flex items-center justify-between px-3 py-1.5 border-t border-border-subtle bg-bg-primary/30 hover:bg-bg-elevated/40 transition-colors"
           >
-            <div className="flex items-center gap-1.5 text-xs text-accent-purple">
-              <MessageSquare className="w-3 h-3" />
-              <span className="font-medium">AIに質問する</span>
+            <div className="flex items-center gap-1.5 text-sm text-accent-purple">
+              <MessageSquare className="w-4 h-4" />
+              <span className="font-bold">AIに質問する</span>
+              {!chatOpen && (
+                <span className="readout text-xs bg-accent-purple/20 text-accent-purple px-1.5 py-0.5 rounded border border-accent-purple/30 ml-1">
+                  チャット
+                </span>
+              )}
             </div>
             {chatOpen ? <ChevronUp className="w-3 h-3 text-text-dim" /> : <ChevronDown className="w-3 h-3 text-text-dim" />}
           </button>
