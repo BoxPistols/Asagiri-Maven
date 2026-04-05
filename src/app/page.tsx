@@ -197,10 +197,13 @@ export default function Dashboard() {
   // --- Unit selection & interaction modes ---
   const [selectedUnit, setSelectedUnit] = useState<GameUnit | null>(null);
   const [dispatchError, setDispatchError] = useState<string | null>(null);
-  const [showTutorial, setShowTutorial] = useState<boolean>(() => {
-    if (typeof window === "undefined") return true;
-    return localStorage.getItem("maven-tutorial-done") !== "true";
-  });
+  // Start false to avoid hydration mismatch; enable on client via useEffect
+  const [showTutorial, setShowTutorial] = useState<boolean>(false);
+  useEffect(() => {
+    if (localStorage.getItem("maven-tutorial-done") !== "true") {
+      setShowTutorial(true);
+    }
+  }, []);
   const [targetingMode, setTargetingMode] = useState(false);
   const [moveMode, setMoveMode] = useState(false);
   const [attackMode, setAttackMode] = useState(false);
@@ -430,10 +433,9 @@ export default function Dashboard() {
         || selectedUnit.faction !== "player"
         || selectedUnit.actedThisTurn
         || state.turnPhase !== "player") return;
-    const stepDistance = selectedUnit.stepDistance ?? selectedUnit.speed;
-    if (!stepDistance || stepDistance <= 0) return;
-    const movePoints = selectedUnit.movePoints ?? 1;
-    const stepSize = stepDistance * movePoints;
+    // Arrow = 1 step (not the full move range)
+    const stepSize = selectedUnit.stepDistance ?? selectedUnit.speed;
+    if (!stepSize || stepSize <= 0) return;
     const newLat = selectedUnit.lat + dy * stepSize;
     const newLng = selectedUnit.lng + dx * stepSize;
     audio.playMove();

@@ -162,7 +162,7 @@ export default function TutorialMode({ onComplete, onSkip }: TutorialModeProps) 
         {step.highlight === "ally" && (
           <div className="flex justify-center gap-4 mb-6">
             <div className="relative">
-              <svg width="60" height="66" viewBox="0 0 40 44">
+              <svg width="120" height="132" viewBox="0 0 40 44">
                 <circle cx="20" cy="18" r="16" fill="rgba(59,130,246,0.25)" />
                 <path d="M 20 2 L 36 6 L 36 22 Q 36 32 20 36 Q 4 32 4 22 L 4 6 Z" fill="rgba(15,23,42,0.95)" stroke="#3b82f6" strokeWidth="2"/>
                 <rect x="8" y="0" width="24" height="6" rx="1" fill="#3b82f6"/>
@@ -176,7 +176,7 @@ export default function TutorialMode({ onComplete, onSkip }: TutorialModeProps) 
         {step.highlight === "enemy" && (
           <div className="flex justify-center gap-4 mb-6">
             <div className="relative">
-              <svg width="72" height="78" viewBox="0 0 48 52">
+              <svg width="144" height="156" viewBox="0 0 48 52">
                 <circle cx="24" cy="22" r="20" fill="rgba(239,68,68,0.3)">
                   <animate attributeName="r" values="18;24;18" dur="1.5s" repeatCount="indefinite"/>
                   <animate attributeName="opacity" values="0.6;0;0.6" dur="1.5s" repeatCount="indefinite"/>
