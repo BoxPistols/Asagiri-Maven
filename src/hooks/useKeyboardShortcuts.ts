@@ -14,6 +14,7 @@ interface KeyboardHandlers {
   onEndTurn: () => void;
   onEscape: () => void;
   onCycleUnit: () => void;
+  onArrowMove?: (dx: number, dy: number) => void; // dx/dy in step units (-1, 0, 1)
   enabled: boolean; // only active during player phase
 }
 
@@ -68,6 +69,23 @@ export function useKeyboardShortcuts(handlers: KeyboardHandlers): void {
         case "tab":
           e.preventDefault();
           handlers.onCycleUnit();
+          break;
+
+        case "arrowup":
+          e.preventDefault();
+          handlers.onArrowMove?.(0, 1);
+          break;
+        case "arrowdown":
+          e.preventDefault();
+          handlers.onArrowMove?.(0, -1);
+          break;
+        case "arrowleft":
+          e.preventDefault();
+          handlers.onArrowMove?.(-1, 0);
+          break;
+        case "arrowright":
+          e.preventDefault();
+          handlers.onArrowMove?.(1, 0);
           break;
       }
     };

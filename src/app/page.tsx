@@ -19,6 +19,7 @@ import UnitDetailPanel from "@/components/UnitDetailPanel";
 import TargetingOverlay from "@/components/TargetingOverlay";
 import CombatToast from "@/components/CombatToast";
 import MissionObjectives from "@/components/MissionObjectives";
+import TutorialMode from "@/components/TutorialMode";
 import { WAVE_CONFIGS } from "@/lib/scenarios";
 import { isNearFriendlyFacility } from "@/lib/combat-rules";
 import type {
@@ -196,6 +197,10 @@ export default function Dashboard() {
   // --- Unit selection & interaction modes ---
   const [selectedUnit, setSelectedUnit] = useState<GameUnit | null>(null);
   const [dispatchError, setDispatchError] = useState<string | null>(null);
+  const [showTutorial, setShowTutorial] = useState<boolean>(() => {
+    if (typeof window === "undefined") return true;
+    return localStorage.getItem("maven-tutorial-done") !== "true";
+  });
   const [targetingMode, setTargetingMode] = useState(false);
   const [moveMode, setMoveMode] = useState(false);
   const [attackMode, setAttackMode] = useState(false);
@@ -419,6 +424,22 @@ export default function Dashboard() {
   }, [state.playerUnits, selectedUnit, audio]);
 
   // --- Keyboard shortcuts ---
+  // Arrow key movement: move selected unit by 1 step in cardinal direction
+  const handleArrowMove = useCallback((dx: number, dy: number) => {
+    if (!selectedUnit
+        || selectedUnit.faction !== "player"
+        || selectedUnit.actedThisTurn
+        || state.turnPhase !== "player") return;
+    const stepDistance = selectedUnit.stepDistance ?? selectedUnit.speed;
+    if (!stepDistance || stepDistance <= 0) return;
+    const movePoints = selectedUnit.movePoints ?? 1;
+    const stepSize = stepDistance * movePoints;
+    const newLat = selectedUnit.lat + dy * stepSize;
+    const newLng = selectedUnit.lng + dx * stepSize;
+    audio.playMove();
+    dispatch({ type: "MOVE_UNIT", unitId: selectedUnit.id, lat: newLat, lng: newLng });
+  }, [selectedUnit, state.turnPhase, dispatch, audio]);
+
   useKeyboardShortcuts({
     onMove: handleEnterMoveMode,
     onAttack: handleEnterAttackMode,
@@ -427,6 +448,7 @@ export default function Dashboard() {
     onEndTurn: handleEndPlayerPhase,
     onEscape: handleCloseDetail,
     onCycleUnit: handleCycleUnit,
+    onArrowMove: handleArrowMove,
     enabled: state.phase === "playing" && state.turnPhase === "player",
   });
 
@@ -564,6 +586,20 @@ export default function Dashboard() {
             {/* Combat result toasts */}
             {isPlaying && (
               <CombatToast log={state.log} currentTurn={state.turn} />
+            )}
+
+            {/* Interactive tutorial (shown once on first visit) */}
+            {showTutorial && (
+              <TutorialMode
+                onComplete={() => {
+                  setShowTutorial(false);
+                  localStorage.setItem("maven-tutorial-done", "true");
+                }}
+                onSkip={() => {
+                  setShowTutorial(false);
+                  localStorage.setItem("maven-tutorial-done", "true");
+                }}
+              />
             )}
 
             {/* Dispatch error toast */}
