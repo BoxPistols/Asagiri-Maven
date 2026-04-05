@@ -135,7 +135,6 @@ export default function Dashboard() {
   const themeValue = useThemeProvider();
   const gameValue = useGameProvider();
   const { state, dispatch } = gameValue;
-  const [, setSelectedMarker] = useState<string | null>(null);
 
   // --- Audio ---
   const audio = useGameAudio();
@@ -277,7 +276,6 @@ export default function Dashboard() {
   const [attackMode, setAttackMode] = useState(false);
 
   const handleSelectMarker = useCallback((id: string | null) => {
-    setSelectedMarker(id);
     if (id) dispatch({ type: "SELECT_UNIT", unitId: id });
   }, [dispatch]);
 

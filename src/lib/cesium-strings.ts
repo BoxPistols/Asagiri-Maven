@@ -8,4 +8,10 @@ export const CESIUM_UI = {
   PLATEAU_CITY_UNIT: "都市",
   CAMERA_TITLE: "カメラ移動",
   CAMERA_COMPACT: "カメラ",
+  CONTROL_TITLE: "3Dコントロール",
+  TIME_LABEL: "時刻",
+  TIME_NOW: "現在",
+  TIME_DAY: "昼",
+  TIME_NIGHT: "夜",
+  TERRAIN_EXAG: "地形誇張",
 } as const;

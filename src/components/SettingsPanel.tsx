@@ -18,6 +18,7 @@ export default function SettingsPanel({
   onToggleAudio,
 }: SettingsPanelProps) {
   const [open, setOpen] = useState(false);
+  const [tutorialResetConfirm, setTutorialResetConfirm] = useState(false);
 
   return (
     <>
@@ -112,12 +113,19 @@ export default function SettingsPanel({
                 <button
                   onClick={() => {
                     localStorage.removeItem("maven-tutorial-done");
-                    alert("次回ゲーム開始時にチュートリアルが表示されます。");
+                    setTutorialResetConfirm(true);
+                    setTimeout(() => setTutorialResetConfirm(false), 2500);
                   }}
                   className="w-full px-3 py-2 rounded border border-border-subtle bg-bg-elevated/30 hover:border-accent-cyan/30 transition-colors text-xs text-text-secondary hover:text-accent-cyan"
                 >
                   チュートリアルをリセット
                 </button>
+                {tutorialResetConfirm && (
+                  <div className="mt-2 px-3 py-2 rounded bg-alert-success/10 border border-alert-success/30 text-xs text-alert-success flex items-center gap-1.5">
+                    <Check className="w-3.5 h-3.5" />
+                    リロード時にチュートリアルが表示されます
+                  </div>
+                )}
               </div>
             </div>
           </div>

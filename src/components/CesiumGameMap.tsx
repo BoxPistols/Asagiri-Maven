@@ -155,6 +155,7 @@ export default function CesiumGameMap({
 
     let destroyed = false;
     let viewer: ViewerType | null = null;
+    let handlerToDestroy: { destroy: () => void } | null = null;
 
     (async () => {
       try {
@@ -190,6 +191,7 @@ export default function CesiumGameMap({
 
         // Click handler — pick entity or ground
         const handler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
+        handlerToDestroy = handler as unknown as { destroy: () => void };
         handler.setInputAction((movement: { position: { x: number; y: number } }) => {
           const picked = viewer!.scene as unknown as { pick: (pos: { x: number; y: number }) => { id?: { id?: string } } | undefined };
           const pick = picked.pick(movement.position);
@@ -220,13 +222,12 @@ export default function CesiumGameMap({
             if (destroyed) break;
             viewer.scene.primitives.add(tileset);
             setLoadedCities(prev => prev + 1);
-          } catch (e) {
-            console.warn(`PLATEAU load failed: ${city.name}`, e);
+          } catch {
+            // Tileset load failure is non-fatal; UI shows loaded count
           }
         }
       } catch (err) {
         if (!destroyed) {
-          console.error("Cesium init error:", err);
           setError(err instanceof Error ? err.message : "Cesium init failed");
           setLoading(false);
         }
@@ -235,6 +236,7 @@ export default function CesiumGameMap({
 
     return () => {
       destroyed = true;
+      if (handlerToDestroy) try { handlerToDestroy.destroy(); } catch { /* ignore */ }
       if (viewer) try { viewer.destroy(); } catch { /* ignore */ }
       viewerRef.current = null;
     };
@@ -503,7 +505,7 @@ export default function CesiumGameMap({
               onClick={() => setSceneOpen(o => !o)}
               className="w-full px-3 py-1.5 border-b border-border-subtle hover:bg-bg-elevated/30 transition-colors flex items-center justify-between"
             >
-              <span className="readout text-xs text-accent-cyan uppercase tracking-wider">3Dコントロール</span>
+              <span className="readout text-xs text-accent-cyan uppercase tracking-wider">{CESIUM_UI.CONTROL_TITLE}</span>
               <span className="text-text-dim text-xs">{sceneOpen ? "▲" : "▼"}</span>
             </button>
             {sceneOpen && (
@@ -529,13 +531,13 @@ export default function CesiumGameMap({
                 {/* Lighting */}
                 <div>
                   <div className="readout text-xs text-text-dim uppercase tracking-wider mb-1 px-1">
-                    時刻
+                    {CESIUM_UI.TIME_LABEL}
                   </div>
                   <div className="flex gap-0.5">
                     {([
-                      { key: "auto", label: "現在" },
-                      { key: "day", label: "昼" },
-                      { key: "night", label: "夜" },
+                      { key: "auto", label: CESIUM_UI.TIME_NOW },
+                      { key: "day", label: CESIUM_UI.TIME_DAY },
+                      { key: "night", label: CESIUM_UI.TIME_NIGHT },
                     ] as const).map(opt => (
                       <button
                         key={opt.key}
@@ -556,7 +558,7 @@ export default function CesiumGameMap({
                 <div>
                   <div className="flex items-center justify-between mb-1 px-1">
                     <span className="readout text-xs text-text-dim uppercase tracking-wider">
-                      地形誇張
+                      {CESIUM_UI.TERRAIN_EXAG}
                     </span>
                     <span className="readout text-xs text-accent-cyan">×{terrainExag.toFixed(1)}</span>
                   </div>
