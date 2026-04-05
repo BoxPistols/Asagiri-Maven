@@ -20,6 +20,7 @@ import UnitDetailPanel from "@/components/UnitDetailPanel";
 import ActionLauncher from "@/components/ActionLauncher";
 import UnactedUnitsPanel from "@/components/UnactedUnitsPanel";
 import MapLegend from "@/components/MapLegend";
+import MavenAiAssistant from "@/components/MavenAiAssistant";
 import TargetingOverlay from "@/components/TargetingOverlay";
 import CombatToast from "@/components/CombatToast";
 import MissionObjectives from "@/components/MissionObjectives";
@@ -635,6 +636,17 @@ export default function Dashboard() {
 
             {/* Map legend (collapsible) */}
             {isPlaying && <MapLegend />}
+
+            {/* MAVEN AI Assistant — situation analysis & action suggestions */}
+            {isPlaying && (
+              <MavenAiAssistant
+                state={state}
+                onSelectUnit={(unit) => {
+                  audio.playSelect();
+                  setSelectedUnit(unit);
+                }}
+              />
+            )}
 
             {/* Unacted units panel — always visible during player phase */}
             {isPlaying && state.turnPhase === "player" && (
