@@ -195,6 +195,7 @@ export default function Dashboard() {
 
   // --- Unit selection & interaction modes ---
   const [selectedUnit, setSelectedUnit] = useState<GameUnit | null>(null);
+  const [dispatchError, setDispatchError] = useState<string | null>(null);
   const [targetingMode, setTargetingMode] = useState(false);
   const [moveMode, setMoveMode] = useState(false);
   const [attackMode, setAttackMode] = useState(false);
@@ -232,17 +233,27 @@ export default function Dashboard() {
     }
   }, [selectedUnit, state.enemyUnits, state.playerUnits, state.turnPhase, dispatch, audio]);
 
-  // Map click: if a player unit is selected, move it there
+  // Map click: if a player unit is selected, move it there (or report out-of-range)
   const handleMapClick = useCallback((lat: number, lng: number) => {
-    if (selectedUnit
-        && selectedUnit.faction === "player"
-        && !selectedUnit.actedThisTurn
-        && state.turnPhase === "player"
-        && selectedUnit.speed > 0) {
-      audio.playMove();
-      dispatch({ type: "MOVE_UNIT", unitId: selectedUnit.id, lat, lng });
-      setMoveMode(false);
+    if (!selectedUnit
+        || selectedUnit.faction !== "player"
+        || selectedUnit.actedThisTurn
+        || state.turnPhase !== "player"
+        || selectedUnit.speed <= 0) return;
+
+    // Check range
+    const dLat = lat - selectedUnit.lat;
+    const dLng = lng - selectedUnit.lng;
+    const dist = Math.sqrt(dLat * dLat + dLng * dLng);
+    if (dist > selectedUnit.speed) {
+      audio.playError();
+      setDispatchError(`射程外です (${dist.toFixed(2)} > ${selectedUnit.speed})`);
+      setTimeout(() => setDispatchError(null), 2000);
+      return;
     }
+    audio.playMove();
+    dispatch({ type: "MOVE_UNIT", unitId: selectedUnit.id, lat, lng });
+    setMoveMode(false);
   }, [selectedUnit, state.turnPhase, dispatch, audio]);
 
   // Action mode toggles
@@ -544,6 +555,13 @@ export default function Dashboard() {
             {/* Combat result toasts */}
             {isPlaying && (
               <CombatToast log={state.log} currentTurn={state.turn} />
+            )}
+
+            {/* Dispatch error toast */}
+            {dispatchError && (
+              <div className="absolute bottom-32 left-1/2 -translate-x-1/2 z-[1500] readout text-sm bg-alert-critical/95 text-white px-4 py-2 rounded-md shadow-lg animate-slide-up">
+                ⚠️ {dispatchError}
+              </div>
             )}
 
             {/* Floating damage numbers overlay */}

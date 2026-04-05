@@ -438,10 +438,13 @@ export default function TacticalMap({
     if (!le.latlng) return;
     const { lat, lng } = le.latlng;
 
-    if (selectedPlayerUnit && !actedSet.has(selectedPlayerUnit.id) && turnPhase === "player") {
+    if (selectedPlayerUnit && !actedSet.has(selectedPlayerUnit.id) && turnPhase === "player" && selectedPlayerUnit.speed > 0) {
       const dist = distanceDeg(selectedPlayerUnit, { lat, lng });
       if (dist <= selectedPlayerUnit.speed) {
         setMoveTarget({ lat, lng });
+        onMapClick?.(lat, lng);
+      } else {
+        // Out of range — dispatch with a flag so page can show toast
         onMapClick?.(lat, lng);
       }
     }
@@ -506,7 +509,6 @@ export default function TacticalMap({
                 const mi = mapInstance as { target?: { on?: (event: string, handler: (e: unknown) => void) => void } };
                 if (mi.target?.on) {
                   mi.target.on("click", handleMapContainerClick);
-                  mi.target.on("mousemove", handleMapMouseMove);
                 }
               }}
             >
@@ -560,19 +562,6 @@ export default function TacticalMap({
                     }}
                   />
                 </>
-              )}
-
-              {/* === Movement path preview (dashed line from unit to cursor) === */}
-              {pathPreview && (
-                <Polyline
-                  positions={[pathPreview.from, pathPreview.to]}
-                  pathOptions={{
-                    color: pathPreview.color,
-                    weight: 2,
-                    opacity: 0.6,
-                    dashArray: "6 4",
-                  }}
-                />
               )}
 
               {/* === Move target marker === */}

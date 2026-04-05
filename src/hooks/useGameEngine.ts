@@ -112,16 +112,25 @@ function spawnEnemyUnits(state: GameState): {
   const log: GameLogEntry[] = [];
 
   let units = [...state.enemyUnits];
-  if (turnInWave === 0) {
-    const spawned: GameUnit[] = waveConfig.spawnUnits.map((tmpl, i) => ({
-      ...tmpl,
-      id: `enemy-w${state.wave}-${i}-${uid().slice(0, 6)}`,
-      status: "moving" as const,
-      actedThisTurn: false,
-    }));
+  // Progressive spawning: spawn ~2 enemies per turn until all units are deployed
+  const totalSpawn = waveConfig.spawnUnits.length;
+  const perTurn = Math.max(1, Math.ceil(totalSpawn / Math.max(1, waveConfig.turns - 1)));
+  const alreadySpawned = state.enemyUnits.filter(u => u.id.startsWith(`enemy-w${state.wave}-`)).length;
+  const spawnStart = alreadySpawned;
+  const spawnEnd = Math.min(totalSpawn, spawnStart + perTurn);
+
+  if (turnInWave > 0 && spawnStart < totalSpawn) {
+    const spawned: GameUnit[] = waveConfig.spawnUnits
+      .slice(spawnStart, spawnEnd)
+      .map((tmpl, i) => ({
+        ...tmpl,
+        id: `enemy-w${state.wave}-${spawnStart + i}-${uid().slice(0, 6)}`,
+        status: "moving" as const,
+        actedThisTurn: false,
+      }));
     units = [...units, ...spawned];
     for (const u of spawned) {
-      log.push(makeLog("intel", `敵部隊出現: ${u.name}`, state.turn));
+      log.push(makeLog("intel", `⚠️ 敵増援出現: ${u.name}`, state.turn));
     }
   }
 
@@ -240,8 +249,9 @@ function gameReducer(state: GameState, action: GameAction): GameState {
     case "START_GAME": {
       const initial = createInitialGameState();
       const waveConfig = getWaveConfig(1);
-      // Spawn Wave 1 enemies immediately so player sees threats from turn 1
-      const spawnedEnemies: GameUnit[] = waveConfig.spawnUnits.map((tmpl, i) => ({
+      // Spawn only initial 2 enemies — more will come as reinforcements
+      const initialCount = Math.min(2, waveConfig.spawnUnits.length);
+      const spawnedEnemies: GameUnit[] = waveConfig.spawnUnits.slice(0, initialCount).map((tmpl, i) => ({
         ...tmpl,
         id: `enemy-w1-${i}-${uid().slice(0, 6)}`,
         status: "moving" as const,

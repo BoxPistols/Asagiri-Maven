@@ -19,7 +19,7 @@ export const SCOUT_DRONE: UnitTemplate = {
   hp: 20,
   attack: 10,
   defense: 10,
-  speed: 3,
+  speed: 1.0,
   description: "高速偵察。対歩兵有利、対艦不利",
 };
 
@@ -30,7 +30,7 @@ export const COMBAT_DRONE: UnitTemplate = {
   hp: 35,
   attack: 20,
   defense: 15,
-  speed: 2,
+  speed: 0.7,
   description: "攻撃型無人機。対歩兵有利、対艦不利",
 };
 
@@ -41,7 +41,7 @@ export const PATROL_SHIP: UnitTemplate = {
   hp: 60,
   attack: 25,
   defense: 40,
-  speed: 1,
+  speed: 0.5,
   description: "哨戒・防空艦。対ドローン有利、対車両不利",
 };
 
@@ -52,7 +52,7 @@ export const ASSAULT_SHIP: UnitTemplate = {
   hp: 80,
   attack: 35,
   defense: 45,
-  speed: 1,
+  speed: 0.5,
   description: "強襲揚陸艦。対ドローン有利、対車両不利",
 };
 
@@ -63,7 +63,7 @@ export const COMMAND_SHIP: UnitTemplate = {
   hp: 150,
   attack: 40,
   defense: 50,
-  speed: 1,
+  speed: 0.3,
   description: "敵艦隊旗艦。重装甲・高火力。車両部隊で攻めろ",
 };
 
@@ -74,7 +74,7 @@ export const CYBER_UNIT: UnitTemplate = {
   hp: 25,
   attack: 15,
   defense: 8,
-  speed: 4,
+  speed: 2.0,
   description: "電子戦特化。対ドローン有利、対歩兵不利。射程無制限",
 };
 
@@ -85,7 +85,7 @@ export const GROUND_VEHICLE: UnitTemplate = {
   hp: 50,
   attack: 22,
   defense: 30,
-  speed: 2,
+  speed: 0.7,
   description: "汎用装甲車両。対艦有利、対ドローン不利",
 };
 
@@ -96,7 +96,7 @@ export const ELITE_VEHICLE: UnitTemplate = {
   hp: 70,
   attack: 30,
   defense: 38,
-  speed: 2,
+  speed: 0.7,
   description: "精鋭機甲部隊。対艦有利、対ドローン不利",
 };
 
