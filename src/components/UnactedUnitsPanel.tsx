@@ -79,6 +79,7 @@ export default function UnactedUnitsPanel({
                 className={`w-full flex items-center gap-2 px-3 py-2 border-b border-border-subtle transition-colors text-left ${
                   isSelected ? "bg-accent-cyan/15" : "hover:bg-bg-elevated/40"
                 }`}
+                aria-label={`${unit.name}を選択 (HP ${unit.hp}/${unit.maxHp})`}
               >
                 <Icon className="w-4 h-4 text-accent-cyan shrink-0" />
                 <div className="flex-1 min-w-0">

@@ -1094,6 +1094,7 @@ export default function TacticalMap({
           <button
             className={`btn-tactical p-1.5 ${showLayerPanel ? "glow-cyan" : ""}`}
             onClick={() => setShowLayerPanel(p => !p)}
+            aria-label="レイヤー切替"
           >
             <Layers className="w-3.5 h-3.5" />
           </button>
@@ -1104,6 +1105,7 @@ export default function TacticalMap({
                 // Reset map view
               }
             }}
+            aria-label="マップ位置リセット"
           >
             <Crosshair className="w-3.5 h-3.5" />
           </button>

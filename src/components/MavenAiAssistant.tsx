@@ -61,6 +61,8 @@ export default function MavenAiAssistant({ state, onSelectUnit }: MavenAiAssista
       <button
         onClick={() => setOpen(o => !o)}
         className="w-full flex items-center justify-between px-3 py-2 border-b border-border-subtle bg-accent-purple/5 hover:bg-accent-purple/10 transition-colors"
+        aria-label={open ? "MAVEN AI パネルを閉じる" : "MAVEN AI パネルを開く"}
+        aria-expanded={open}
       >
         <div className="flex items-center gap-2">
           <div className="relative">

@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Settings, X, Check } from "lucide-react";
 import type { TooltipMode } from "@/hooks/useTooltipSettings";
+import { safeRemove } from "@/lib/safe-storage";
 
 interface SettingsPanelProps {
   tooltipMode: TooltipMode;
@@ -20,6 +21,16 @@ export default function SettingsPanel({
   const [open, setOpen] = useState(false);
   const [tutorialResetConfirm, setTutorialResetConfirm] = useState(false);
 
+  // ESC to close modal
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("keydown", handler);
+    return () => document.removeEventListener("keydown", handler);
+  }, [open]);
+
   return (
     <>
       <button
@@ -32,15 +43,22 @@ export default function SettingsPanel({
       </button>
 
       {open && (
-        <div className="fixed inset-0 z-[9500] bg-bg-deep/70 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setOpen(false)}>
+        <div
+          className="fixed inset-0 z-[9500] bg-bg-deep/70 backdrop-blur-sm flex items-center justify-center p-4"
+          onClick={() => setOpen(false)}
+          role="presentation"
+        >
           <div
             className="bg-bg-surface border border-border-active rounded-lg w-full max-w-sm shadow-2xl animate-slide-up"
             onClick={e => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="settings-dialog-title"
           >
             <div className="flex items-center justify-between px-4 py-3 border-b border-border-subtle">
               <div className="flex items-center gap-2">
                 <Settings className="w-4 h-4 text-accent-cyan" />
-                <span className="readout text-sm text-accent-cyan uppercase tracking-wider font-bold">
+                <span id="settings-dialog-title" className="readout text-sm text-accent-cyan uppercase tracking-wider font-bold">
                   設定
                 </span>
               </div>
@@ -112,7 +130,7 @@ export default function SettingsPanel({
                 <div className="text-xs text-text-primary font-medium mb-2">チュートリアル</div>
                 <button
                   onClick={() => {
-                    localStorage.removeItem("maven-tutorial-done");
+                    safeRemove("maven-tutorial-done");
                     setTutorialResetConfirm(true);
                     setTimeout(() => setTutorialResetConfirm(false), 2500);
                   }}

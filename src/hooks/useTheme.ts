@@ -1,6 +1,7 @@
 "use client";
 
 import { createContext, useCallback, useContext, useEffect, useState } from "react";
+import { safeGet, safeSet } from "@/lib/safe-storage";
 
 type Theme = "dark" | "light";
 
@@ -20,7 +21,7 @@ export function useThemeProvider() {
   const [theme, setThemeState] = useState<Theme>("dark");
 
   useEffect(() => {
-    const stored = localStorage.getItem("maven-theme") as Theme | null;
+    const stored = safeGet("maven-theme") as Theme | null;
     const initial = stored ?? "dark";
     setThemeState(initial);
     document.documentElement.setAttribute("data-theme", initial);
@@ -29,14 +30,14 @@ export function useThemeProvider() {
   const setTheme = useCallback((t: Theme) => {
     setThemeState(t);
     document.documentElement.setAttribute("data-theme", t);
-    localStorage.setItem("maven-theme", t);
+    safeSet("maven-theme", t);
   }, []);
 
   const toggle = useCallback(() => {
     setThemeState(prev => {
       const next = prev === "dark" ? "light" : "dark";
       document.documentElement.setAttribute("data-theme", next);
-      localStorage.setItem("maven-theme", next);
+      safeSet("maven-theme", next);
       return next;
     });
   }, []);
