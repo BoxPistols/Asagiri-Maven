@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { safeGet, safeSet } from "@/lib/safe-storage";
 
 export type TooltipMode = "auto" | "manual";
 
@@ -18,19 +19,18 @@ export function useTooltipSettings(): TooltipSettings {
   const [mode, setModeState] = useState<TooltipMode>("auto");
 
   useEffect(() => {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    if (stored === "manual") setModeState("manual");
+    if (safeGet(STORAGE_KEY) === "manual") setModeState("manual");
   }, []);
 
   const setMode = useCallback((m: TooltipMode) => {
     setModeState(m);
-    try { localStorage.setItem(STORAGE_KEY, m); } catch { /* ignore */ }
+    safeSet(STORAGE_KEY, m);
   }, []);
 
   const toggleMode = useCallback(() => {
     setModeState(prev => {
       const next = prev === "auto" ? "manual" : "auto";
-      try { localStorage.setItem(STORAGE_KEY, next); } catch { /* ignore */ }
+      safeSet(STORAGE_KEY, next);
       return next;
     });
   }, []);

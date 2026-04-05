@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useRef, useState, useEffect } from "react";
+import { safeGet, safeSet } from "@/lib/safe-storage";
 
 // ---------------------------------------------------------------------------
 // useGameAudio — Synthesized sound effects via Web Audio API
@@ -11,25 +12,19 @@ const DEFAULT_VOLUME = 0.3;
 
 export function useGameAudio() {
   const ctxRef = useRef<AudioContext | null>(null);
+  const pendingTimersRef = useRef<Set<ReturnType<typeof setTimeout>>>(new Set());
   const masterGainRef = useRef<GainNode | null>(null);
   const volumeRef = useRef(DEFAULT_VOLUME);
   // Default muted=true (opt-in audio). Start muted to avoid hydration mismatch.
   const [muted, setMuted] = useState(true);
   useEffect(() => {
-    try {
-      // Only unmute if user previously enabled audio
-      const stored = localStorage.getItem(STORAGE_KEY);
-      if (stored === "false") setMuted(false);
-    } catch { /* ignore */ }
+    // Only unmute if user previously enabled audio
+    if (safeGet(STORAGE_KEY) === "false") setMuted(false);
   }, []);
 
   // Persist muted state
   useEffect(() => {
-    try {
-      localStorage.setItem(STORAGE_KEY, String(muted));
-    } catch {
-      // ignore
-    }
+    safeSet(STORAGE_KEY, String(muted));
     if (masterGainRef.current) {
       masterGainRef.current.gain.value = muted ? 0 : volumeRef.current;
     }
@@ -67,6 +62,26 @@ export function useGameAudio() {
       data[i] = Math.random() * 2 - 1;
     }
     return buffer;
+  }, []);
+
+  // Tracked setTimeout that auto-removes from pending set
+  const trackedTimeout = useCallback((fn: () => void, ms: number) => {
+    const timers = pendingTimersRef.current;
+    const id = setTimeout(() => {
+      timers.delete(id);
+      try { fn(); } catch { /* ignore */ }
+    }, ms);
+    timers.add(id);
+    return id;
+  }, []);
+
+  // Cleanup all pending timers on unmount
+  useEffect(() => {
+    const timers = pendingTimersRef.current;
+    return () => {
+      for (const id of timers) clearTimeout(id);
+      timers.clear();
+    };
   }, []);
 
   const playTone = useCallback((
@@ -202,52 +217,44 @@ export function useGameAudio() {
   const playPhaseChange = useCallback(() => {
     try {
       playTone(660, 0.1, "sine", { attack: 0.005, decay: 0.06, sustain: 0.2, release: 0.03, gainStart: 0.35 });
-      setTimeout(() => {
-        try {
-          playTone(880, 0.1, "sine", { attack: 0.005, decay: 0.06, sustain: 0.2, release: 0.03, gainStart: 0.35 });
-        } catch { /* ignore */ }
+      trackedTimeout(() => {
+        playTone(880, 0.1, "sine", { attack: 0.005, decay: 0.06, sustain: 0.2, release: 0.03, gainStart: 0.35 });
       }, 110);
     } catch { /* audio unavailable */ }
-  }, [playTone]);
+  }, [playTone, trackedTimeout]);
 
   const playWaveStart = useCallback(() => {
     try {
       const notes = [523, 659, 784]; // C-E-G
       notes.forEach((freq, i) => {
-        setTimeout(() => {
-          try {
-            playTone(freq, 0.15, "sine", { attack: 0.005, decay: 0.1, sustain: 0.2, release: 0.04, gainStart: 0.4 });
-          } catch { /* ignore */ }
+        trackedTimeout(() => {
+          playTone(freq, 0.15, "sine", { attack: 0.005, decay: 0.1, sustain: 0.2, release: 0.04, gainStart: 0.4 });
         }, i * 160);
       });
     } catch { /* audio unavailable */ }
-  }, [playTone]);
+  }, [playTone, trackedTimeout]);
 
   const playVictory = useCallback(() => {
     try {
       const notes = [523, 659, 784, 1047]; // C-E-G-C
       notes.forEach((freq, i) => {
-        setTimeout(() => {
-          try {
-            playTone(freq, 0.25, "sine", { attack: 0.01, decay: 0.15, sustain: 0.3, release: 0.08, gainStart: 0.4 });
-          } catch { /* ignore */ }
+        trackedTimeout(() => {
+          playTone(freq, 0.25, "sine", { attack: 0.01, decay: 0.15, sustain: 0.3, release: 0.08, gainStart: 0.4 });
         }, i * 180);
       });
     } catch { /* audio unavailable */ }
-  }, [playTone]);
+  }, [playTone, trackedTimeout]);
 
   const playDefeat = useCallback(() => {
     try {
       const notes = [523, 415, 349, 294]; // C-Ab-F-D descending minor
       notes.forEach((freq, i) => {
-        setTimeout(() => {
-          try {
-            playTone(freq, 0.3, "sine", { attack: 0.01, decay: 0.2, sustain: 0.2, release: 0.1, gainStart: 0.35 });
-          } catch { /* ignore */ }
+        trackedTimeout(() => {
+          playTone(freq, 0.3, "sine", { attack: 0.01, decay: 0.2, sustain: 0.2, release: 0.1, gainStart: 0.35 });
         }, i * 220);
       });
     } catch { /* audio unavailable */ }
-  }, [playTone]);
+  }, [playTone, trackedTimeout]);
 
   const playError = useCallback(() => {
     try {

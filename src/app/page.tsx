@@ -40,6 +40,7 @@ import type {
   GameLogEntry,
 } from "@/lib/game-types";
 import type { AlertItem, MapMarker, WorkflowCard, ChatMessage, SeverityLevel } from "@/lib/mock-data";
+import { safeGet, safeSet } from "@/lib/safe-storage";
 
 // ========== Adapter functions: game state -> component props ==========
 
@@ -256,18 +257,17 @@ export default function Dashboard() {
   const [showTutorial, setShowTutorial] = useState<boolean>(false);
   const [mapView, setMapView] = useState<"2d" | "3d">("2d");
   useEffect(() => {
-    const saved = localStorage.getItem("maven-map-view");
-    if (saved === "3d") setMapView("3d");
+    if (safeGet("maven-map-view") === "3d") setMapView("3d");
   }, []);
   const toggleMapView = useCallback(() => {
     setMapView(prev => {
       const next = prev === "2d" ? "3d" : "2d";
-      localStorage.setItem("maven-map-view", next);
+      safeSet("maven-map-view", next);
       return next;
     });
   }, []);
   useEffect(() => {
-    if (localStorage.getItem("maven-tutorial-done") !== "true") {
+    if (safeGet("maven-tutorial-done") !== "true") {
       setShowTutorial(true);
     }
   }, []);
@@ -785,11 +785,11 @@ export default function Dashboard() {
               <TutorialMode
                 onComplete={() => {
                   setShowTutorial(false);
-                  localStorage.setItem("maven-tutorial-done", "true");
+                  safeSet("maven-tutorial-done", "true");
                 }}
                 onSkip={() => {
                   setShowTutorial(false);
-                  localStorage.setItem("maven-tutorial-done", "true");
+                  safeSet("maven-tutorial-done", "true");
                 }}
               />
             )}
