@@ -139,6 +139,7 @@ interface TacticalMapProps {
   actedUnitIds?: string[];
   combatLog?: GameLogEntry[];
   currentTurn?: number;
+  focusTarget?: { lat: number; lng: number; key: string } | null;
   children?: React.ReactNode;
 }
 
@@ -159,10 +160,12 @@ export default function TacticalMap({
   actedUnitIds = [],
   combatLog,
   currentTurn,
+  focusTarget,
   children,
 }: TacticalMapProps) {
   const { theme } = useTheme();
   const [mounted, setMounted] = useState(false);
+  const mapInstanceRef = useRef<{ flyTo?: (latlng: [number, number], zoom?: number, options?: { duration?: number }) => void; getZoom?: () => number } | null>(null);
   const [timeValue, setTimeValue] = useState(100);
   const [layers, setLayers] = useState<Record<LayerType, boolean>>({
     facility: true, vehicle: true, drone: true, alert: true, personnel: true,
@@ -181,6 +184,17 @@ export default function TacticalMap({
   const processedLogRef = useRef<Set<string>>(new Set());
 
   useEffect(() => { setMounted(true); }, []);
+
+  // Fly to focus target with animation when it changes
+  useEffect(() => {
+    if (!focusTarget || !mapInstanceRef.current) return;
+    const map = mapInstanceRef.current;
+    if (typeof map.flyTo === "function") {
+      const currentZoom = typeof map.getZoom === "function" ? map.getZoom() ?? 8 : 8;
+      const targetZoom = Math.max(currentZoom, 8);
+      map.flyTo([focusTarget.lat, focusTarget.lng], targetZoom, { duration: 0.8 });
+    }
+  }, [focusTarget]);
 
   // Clear move target after 1.5s
   useEffect(() => {
@@ -621,9 +635,12 @@ export default function TacticalMap({
               style={{ height: "100%", width: "100%" }}
               // @ts-expect-error Leaflet event handlers
               whenReady={(mapInstance: unknown) => {
-                const mi = mapInstance as { target?: { on?: (event: string, handler: (e: unknown) => void) => void } };
+                const mi = mapInstance as { target?: { on?: (event: string, handler: (e: unknown) => void) => void; flyTo?: (latlng: [number, number], zoom?: number, options?: { duration?: number }) => void; getZoom?: () => number } };
                 if (mi.target?.on) {
                   mi.target.on("click", handleMapContainerClick);
+                }
+                if (mi.target) {
+                  mapInstanceRef.current = mi.target;
                 }
               }}
             >

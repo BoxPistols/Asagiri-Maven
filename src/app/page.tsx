@@ -202,6 +202,14 @@ export default function Dashboard() {
 
   // --- Unit selection & interaction modes ---
   const [selectedUnit, setSelectedUnit] = useState<GameUnit | null>(null);
+  const [focusTarget, setFocusTarget] = useState<{ lat: number; lng: number; key: string } | null>(null);
+
+  // Helper to select unit AND fly map to it
+  const selectAndFocus = useCallback((unit: GameUnit) => {
+    audio.playSelect();
+    setSelectedUnit(unit);
+    setFocusTarget({ lat: unit.lat, lng: unit.lng, key: `${unit.id}-${Date.now()}` });
+  }, [audio]);
   const [dispatchError, setDispatchError] = useState<string | null>(null);
   // Start false to avoid hydration mismatch; enable on client via useEffect
   const [showTutorial, setShowTutorial] = useState<boolean>(false);
@@ -534,6 +542,7 @@ export default function Dashboard() {
               actedUnitIds={actedUnitIds}
               combatLog={state.log}
               currentTurn={state.turn}
+              focusTarget={focusTarget}
             />
 
             {/* Phase indicator -- top center, floating over map */}
@@ -641,10 +650,7 @@ export default function Dashboard() {
             {isPlaying && (
               <MavenAiAssistant
                 state={state}
-                onSelectUnit={(unit) => {
-                  audio.playSelect();
-                  setSelectedUnit(unit);
-                }}
+                onSelectUnit={selectAndFocus}
               />
             )}
 
@@ -653,10 +659,7 @@ export default function Dashboard() {
               <UnactedUnitsPanel
                 units={state.playerUnits}
                 selectedId={selectedUnit?.id ?? null}
-                onSelectUnit={(unit) => {
-                  audio.playSelect();
-                  setSelectedUnit(unit);
-                }}
+                onSelectUnit={selectAndFocus}
               />
             )}
 
