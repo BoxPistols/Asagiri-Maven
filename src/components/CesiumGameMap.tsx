@@ -234,7 +234,7 @@ export default function CesiumGameMap({
         },
         label: {
           text: unit.name,
-          font: "bold 11px sans-serif",
+          font: "bold 12px sans-serif",
           pixelOffset: new Cesium.Cartesian2(0, 10),
           fillColor: Cesium.Color.WHITE,
           outlineColor: Cesium.Color.fromCssColorString("#0b1020"),
