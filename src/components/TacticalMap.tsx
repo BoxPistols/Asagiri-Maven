@@ -645,6 +645,18 @@ export default function TacticalMap({
                 const mi = mapInstance as { target?: { on?: (event: string, handler: (e: unknown) => void) => void; flyTo?: (latlng: [number, number], zoom?: number, options?: { duration?: number }) => void; getZoom?: () => number } };
                 if (mi.target?.on) {
                   mi.target.on("click", handleMapContainerClick);
+                  // Auto-close popups after tooltipAutoCloseMs (0 = manual mode)
+                  mi.target.on("popupopen", (e: unknown) => {
+                    if (tooltipAutoCloseMs <= 0) return;
+                    const evt = e as { popup?: { close?: () => void; _closed?: boolean } };
+                    const popup = evt.popup;
+                    if (!popup) return;
+                    setTimeout(() => {
+                      if (!popup._closed && typeof popup.close === "function") {
+                        popup.close();
+                      }
+                    }, tooltipAutoCloseMs);
+                  });
                 }
                 if (mi.target) {
                   mapInstanceRef.current = mi.target;

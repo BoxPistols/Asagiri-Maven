@@ -9,6 +9,7 @@ import { useGameAudio } from "@/hooks/useGameAudio";
 import { useGameSoundEffects } from "@/hooks/useGameSoundEffects";
 import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
 import GameHud from "@/components/GameHud";
+import SettingsPanel from "@/components/SettingsPanel";
 import TacticalMap from "@/components/TacticalMap";
 import dynamic from "next/dynamic";
 const CesiumGameMap = dynamic(() => import("@/components/CesiumGameMap"), { ssr: false });
@@ -29,6 +30,7 @@ import MissionObjectives from "@/components/MissionObjectives";
 import TutorialMode from "@/components/TutorialMode";
 import ReinforcementAlert from "@/components/ReinforcementAlert";
 import { useScreenShake } from "@/hooks/useScreenShake";
+import { useTooltipSettings } from "@/hooks/useTooltipSettings";
 import { WAVE_CONFIGS } from "@/lib/scenarios";
 import { isNearFriendlyFacility, getAttackRange } from "@/lib/combat-rules";
 import type {
@@ -140,6 +142,7 @@ export default function Dashboard() {
   useGameSoundEffects(state, audio);
   useGameBgm(state.phase, state.turnPhase, audio.muted);
   const isShaking = useScreenShake(state.playerUnits);
+  const tooltipSettings = useTooltipSettings();
 
   // --- Turn transition state ---
   const prevTurnRef = useRef(state.turn);
@@ -585,6 +588,14 @@ export default function Dashboard() {
               onResume={handleResume}
               mapView={mapView}
               onToggleView={toggleMapView}
+              settingsSlot={
+                <SettingsPanel
+                  tooltipMode={tooltipSettings.mode}
+                  onTooltipModeChange={tooltipSettings.setMode}
+                  audioMuted={audio.muted}
+                  onToggleAudio={audio.toggleMute}
+                />
+              }
             />
           )}
 
@@ -606,6 +617,7 @@ export default function Dashboard() {
                 combatLog={state.log}
                 currentTurn={state.turn}
                 focusTarget={focusTarget}
+                tooltipAutoCloseMs={tooltipSettings.mode === "auto" ? tooltipSettings.autoCloseMs : 0}
               />
             ) : (
               <CesiumGameMap

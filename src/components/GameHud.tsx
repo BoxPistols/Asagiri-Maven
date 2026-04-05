@@ -21,6 +21,7 @@ interface GameHudProps {
   turnPhase: TurnPhase;
   onPause?: () => void;
   onResume?: () => void;
+  settingsSlot?: React.ReactNode;
 }
 
 // ---------------------------------------------------------------------------
@@ -80,6 +81,7 @@ export default function GameHud({
   onResume,
   mapView = "2d",
   onToggleView,
+  settingsSlot,
 }: GameHudProps) {
   const { theme, toggle } = useTheme();
   const isPaused = phase === "paused";
@@ -157,6 +159,9 @@ export default function GameHud({
         >
           {isPaused ? <Play className="w-3.5 h-3.5" /> : <Pause className="w-3.5 h-3.5" />}
         </button>
+
+        {/* Settings slot */}
+        {settingsSlot}
 
         {/* 2D/3D toggle */}
         {onToggleView && (
