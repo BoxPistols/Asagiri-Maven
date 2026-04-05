@@ -186,12 +186,17 @@ export default function TacticalMap({
   useEffect(() => { setMounted(true); }, []);
 
   // Fly to focus target with animation when it changes
+  const lastFlyKeyRef = useRef<string | null>(null);
   useEffect(() => {
     if (!focusTarget || !mapInstanceRef.current) return;
+    // Don't re-fly if the key hasn't actually changed (guard against React StrictMode double-invoke)
+    if (lastFlyKeyRef.current === focusTarget.key) return;
+    lastFlyKeyRef.current = focusTarget.key;
+
     const map = mapInstanceRef.current;
     if (typeof map.flyTo === "function") {
       const currentZoom = typeof map.getZoom === "function" ? map.getZoom() ?? 8 : 8;
-      const targetZoom = Math.max(currentZoom, 8);
+      const targetZoom = Math.max(currentZoom, 7);
       map.flyTo([focusTarget.lat, focusTarget.lng], targetZoom, { duration: 0.8 });
     }
   }, [focusTarget]);

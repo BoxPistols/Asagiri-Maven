@@ -208,10 +208,16 @@ export default function Dashboard() {
   const [focusTarget, setFocusTarget] = useState<{ lat: number; lng: number; key: string } | null>(null);
 
   // Helper to select unit AND fly map to it
+  // Only flies if the unit is DIFFERENT from currently selected (prevents re-warp)
+  const lastFocusedIdRef = useRef<string | null>(null);
   const selectAndFocus = useCallback((unit: GameUnit) => {
     audio.playSelect();
     setSelectedUnit(unit);
-    setFocusTarget({ lat: unit.lat, lng: unit.lng, key: `${unit.id}-${Date.now()}` });
+    // Only fly if this is a genuinely different unit
+    if (lastFocusedIdRef.current !== unit.id) {
+      lastFocusedIdRef.current = unit.id;
+      setFocusTarget({ lat: unit.lat, lng: unit.lng, key: `${unit.id}-${Date.now()}` });
+    }
   }, [audio]);
   const [dispatchError, setDispatchError] = useState<string | null>(null);
   // Start false to avoid hydration mismatch; enable on client via useEffect
