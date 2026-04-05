@@ -814,7 +814,16 @@ export default function TacticalMap({
                 ))}
 
               {/* === Player unit markers with SVG icons === */}
-              {playerUnits?.filter(u => u.status !== "destroyed").map(unit => (
+              {playerUnits?.filter(u => {
+                if (u.status === "destroyed") return false;
+                // Map game unit types to layer types
+                const isBase = u.id.startsWith("base-");
+                if (isBase) return layers.facility;
+                if (u.type === "drone") return layers.drone;
+                if (u.type === "ship" || u.type === "vehicle") return layers.vehicle;
+                if (u.type === "infantry" || u.type === "cyber") return layers.personnel;
+                return true;
+              }).map(unit => (
                 <Marker
                   key={`player-${unit.id}`}
                   position={[unit.lat, unit.lng] as [number, number]}
@@ -866,7 +875,11 @@ export default function TacticalMap({
               ))}
 
               {/* === Enemy unit markers with SVG icons === */}
-              {enemyUnits?.filter(u => u.status !== "destroyed").map(unit => (
+              {enemyUnits?.filter(u => {
+                if (u.status === "destroyed") return false;
+                if (!layers.alert) return false; // enemy = "alert" layer
+                return true;
+              }).map(unit => (
                 <Marker
                   key={`enemy-${unit.id}`}
                   position={[unit.lat, unit.lng] as [number, number]}
@@ -913,7 +926,7 @@ export default function TacticalMap({
               ))}
 
               {/* Enemy pulse circles */}
-              {enemyUnits?.filter(u => u.status !== "destroyed").map(unit => (
+              {enemyUnits?.filter(u => u.status !== "destroyed" && layers.alert).map(unit => (
                 <CircleMarker
                   key={`ering-${unit.id}`}
                   center={[unit.lat, unit.lng] as [number, number]}
