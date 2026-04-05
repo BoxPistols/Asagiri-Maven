@@ -25,6 +25,8 @@ import TargetingOverlay from "@/components/TargetingOverlay";
 import CombatToast from "@/components/CombatToast";
 import MissionObjectives from "@/components/MissionObjectives";
 import TutorialMode from "@/components/TutorialMode";
+import ReinforcementAlert from "@/components/ReinforcementAlert";
+import { useScreenShake } from "@/hooks/useScreenShake";
 import { WAVE_CONFIGS } from "@/lib/scenarios";
 import { isNearFriendlyFacility, getAttackRange } from "@/lib/combat-rules";
 import type {
@@ -135,6 +137,7 @@ export default function Dashboard() {
   const audio = useGameAudio();
   useGameSoundEffects(state, audio);
   useGameBgm(state.phase, state.turnPhase, audio.muted);
+  const isShaking = useScreenShake(state.playerUnits);
 
   // --- Turn transition state ---
   const prevTurnRef = useRef(state.turn);
@@ -509,7 +512,7 @@ export default function Dashboard() {
   return (
     <ThemeContext value={themeValue}>
       <GameContext value={gameValue}>
-        <div className="h-screen flex flex-col overflow-hidden bg-bg-deep">
+        <div className={`h-screen flex flex-col overflow-hidden bg-bg-deep ${isShaking ? "animate-screen-shake" : ""}`}>
           {/* Top HUD bar -- slim, always visible during gameplay */}
           {isPlaying && (
             <GameHud
@@ -676,6 +679,20 @@ export default function Dashboard() {
                 onRepair={handleRepair}
                 onWait={handleWait}
                 onClose={handleCloseDetail}
+              />
+            )}
+
+            {/* Enemy phase vignette - red pulsing screen edges */}
+            {isPlaying && state.turnPhase === "enemy" && (
+              <div className="absolute inset-0 pointer-events-none enemy-phase-vignette z-[800]" />
+            )}
+
+            {/* Reinforcement alerts - dramatic red banner when enemies spawn */}
+            {isPlaying && (
+              <ReinforcementAlert
+                enemyUnits={state.enemyUnits}
+                turn={state.turn}
+                turnPhase={state.turnPhase}
               />
             )}
 

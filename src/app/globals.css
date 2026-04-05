@@ -761,14 +761,55 @@ body::after {
   50% { opacity: 1; }
 }
 
-/* ========== Enemy Phase Vignette ========== */
+/* ========== Enemy Phase Vignette (stronger pulsing) ========== */
 .enemy-phase-vignette {
   background: radial-gradient(
     ellipse at center,
-    transparent 50%,
-    rgba(248, 113, 113, 0.08) 100%
+    transparent 35%,
+    rgba(239, 68, 68, 0.22) 100%
   );
   pointer-events: none;
+  animation: enemy-vignette-pulse 2.2s ease-in-out infinite;
+}
+@keyframes enemy-vignette-pulse {
+  0%, 100% { opacity: 0.7; }
+  50% { opacity: 1; }
+}
+
+/* ========== Screen shake when bases hit ========== */
+@keyframes screen-shake {
+  0%, 100% { transform: translate(0, 0); }
+  10% { transform: translate(-4px, -2px); }
+  20% { transform: translate(4px, 2px); }
+  30% { transform: translate(-3px, 3px); }
+  40% { transform: translate(3px, -3px); }
+  50% { transform: translate(-2px, 2px); }
+  60% { transform: translate(2px, -2px); }
+  70% { transform: translate(-2px, -1px); }
+  80% { transform: translate(2px, 1px); }
+  90% { transform: translate(-1px, 0); }
+}
+.animate-screen-shake {
+  animation: screen-shake 0.5s cubic-bezier(.36,.07,.19,.97) both;
+}
+
+/* ========== Reinforcement alert banner ========== */
+@keyframes reinforcement-slam {
+  0% { opacity: 0; transform: translateY(-40px) scale(0.9); }
+  30% { opacity: 1; transform: translateY(8px) scale(1.05); }
+  45% { transform: translateY(0) scale(1); }
+  80% { opacity: 1; transform: translateY(0) scale(1); }
+  100% { opacity: 0; transform: translateY(-20px) scale(0.95); }
+}
+.animate-reinforcement-slam {
+  animation: reinforcement-slam 3.2s cubic-bezier(.22,.8,.3,1) forwards;
+}
+
+/* ========== Enemy appear pulse ========== */
+@keyframes enemy-appear-flash {
+  0% { opacity: 0; transform: scale(2); }
+  40% { opacity: 1; transform: scale(1); }
+  100% { opacity: 0; transform: scale(1.2); }
 }
 
 /* ========== Action Button States ========== */
