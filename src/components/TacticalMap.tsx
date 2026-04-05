@@ -786,7 +786,7 @@ export default function TacticalMap({
                     },
                   }}
                 >
-                  <Popup>
+                  <Popup autoClose={true} closeOnClick={true} closeButton={true}>
                     <div className="min-w-[200px] p-0 text-text-primary" style={{ fontFamily: "var(--font-display)" }}>
                       <div className="flex items-center gap-2 mb-2">
                         <span
@@ -859,7 +859,7 @@ export default function TacticalMap({
                     },
                   }}
                 >
-                  <Popup>
+                  <Popup autoClose={true} closeOnClick={true} closeButton={true}>
                     <div className="min-w-[200px] p-0 text-text-primary" style={{ fontFamily: "var(--font-display)" }}>
                       <div className="flex items-center gap-2 mb-2">
                         <span className="readout text-xs uppercase px-1.5 py-0.5 rounded font-bold"
@@ -915,7 +915,7 @@ export default function TacticalMap({
                     },
                   }}
                 >
-                  <Popup>
+                  <Popup autoClose={true} closeOnClick={true} closeButton={true}>
                     <div className="min-w-[200px] p-0 text-text-primary" style={{ fontFamily: "var(--font-display)" }}>
                       <div className="flex items-center gap-2 mb-2">
                         <span className="readout text-xs uppercase px-1.5 py-0.5 rounded font-bold"
