@@ -1,6 +1,7 @@
 "use client";
 
-import { Sun, Moon, Pause, Play, Swords, Package, Crosshair, Heart, Shield } from "lucide-react";
+import { Sun, Moon, Pause, Play, Swords, Package, Crosshair, Heart, Shield, Box } from "lucide-react";
+import Link from "next/link";
 import { useTheme } from "@/hooks/useTheme";
 import type { GameKpis, GamePhase, TurnPhase } from "@/lib/game-types";
 
@@ -153,6 +154,16 @@ export default function GameHud({
         >
           {isPaused ? <Play className="w-3.5 h-3.5" /> : <Pause className="w-3.5 h-3.5" />}
         </button>
+
+        {/* 3D preview link */}
+        <Link
+          href="/3d"
+          className="p-1 rounded border border-accent-purple/30 hover:border-accent-purple/60 transition-colors text-accent-purple hover:text-accent-purple"
+          aria-label="3D プレビュー"
+          title="3D PLATEAU プレビュー"
+        >
+          <Box className="w-3.5 h-3.5" />
+        </Link>
       </div>
     </header>
   );
