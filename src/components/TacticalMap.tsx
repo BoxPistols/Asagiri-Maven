@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo, useCallback, useRef } from "react";
+import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { MAP_MARKERS, VEHICLE_ROUTES, type MapMarker, type SeverityLevel } from "@/lib/mock-data";
 import { Layers, Crosshair, Clock, Warehouse, Truck, AlertTriangle, User, Navigation, Swords } from "lucide-react";
 import type { GameUnit, TurnPhase, GameLogEntry } from "@/lib/game-types";
@@ -977,7 +977,7 @@ export default function TacticalMap({
                 const age = Date.now() - line.timestamp;
                 const opacity = Math.max(0, 0.9 - (age / 1200) * 0.9);
                 return (
-                  <g key={`atk-trail-${line.id}`}>
+                  <React.Fragment key={`atk-trail-${line.id}`}>
                     {/* Outer glow */}
                     <Polyline
                       positions={[line.from, line.to]}
@@ -996,7 +996,7 @@ export default function TacticalMap({
                         opacity,
                       }}
                     />
-                  </g>
+                  </React.Fragment>
                 );
               })}
 
@@ -1027,7 +1027,7 @@ export default function TacticalMap({
                 if (age > 1000) return null;
                 const pct = age / 1000;
                 return (
-                  <g key={`impact-${line.id}`}>
+                  <React.Fragment key={`impact-${line.id}`}>
                     {/* Inner burst */}
                     <CircleMarker
                       center={line.to}
@@ -1063,7 +1063,7 @@ export default function TacticalMap({
                         dashArray: "4 4",
                       }}
                     />
-                  </g>
+                  </React.Fragment>
                 );
               })}
             </MapContainer>

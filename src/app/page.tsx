@@ -667,6 +667,7 @@ export default function Dashboard() {
             {isPlaying && (
               <ActionLauncher
                 unit={selectedUnit}
+                enemies={state.enemyUnits}
                 canAct={selectedCanAct}
                 canRepair={canRepair}
                 hasNearbyEnemies={hasNearbyEnemies}

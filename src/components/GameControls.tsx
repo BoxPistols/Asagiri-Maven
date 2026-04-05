@@ -83,55 +83,6 @@ export default function GameControls({
       {/* ===== PLAYER PHASE ===== */}
       {turnPhase === "player" && (
         <div className="flex items-center gap-2 px-3 py-2">
-          {/* Action buttons */}
-          <div className="flex items-center gap-1">
-            <button
-              onClick={onMove}
-              disabled={!canAct}
-              className="btn-tactical py-1.5 px-2.5 gap-1 text-xs disabled:opacity-30 disabled:cursor-not-allowed"
-              title="移動 [Q]"
-            >
-              <Move className="w-3.5 h-3.5" />
-              <span>移動</span>
-              <kbd className="ml-0.5 text-[9px] opacity-40 font-mono">Q</kbd>
-            </button>
-
-            <button
-              onClick={onAttack}
-              disabled={!canAct}
-              className="btn-tactical py-1.5 px-2.5 gap-1 text-xs !border-alert-critical/30 !text-alert-critical hover:!bg-alert-critical/10 disabled:opacity-30 disabled:cursor-not-allowed disabled:!border-border-subtle disabled:!text-text-dim"
-              title="攻撃 [W]"
-            >
-              <Swords className="w-3.5 h-3.5" />
-              <span>攻撃</span>
-              <kbd className="ml-0.5 text-[9px] opacity-40 font-mono">W</kbd>
-            </button>
-
-            <button
-              onClick={onRepair}
-              disabled={!canAct || !canRepair}
-              className="btn-tactical py-1.5 px-2.5 gap-1 text-xs !border-alert-success/30 !text-alert-success hover:!bg-alert-success/10 disabled:opacity-30 disabled:cursor-not-allowed disabled:!border-border-subtle disabled:!text-text-dim"
-              title="修理 [E]"
-            >
-              <Wrench className="w-3.5 h-3.5" />
-              <span>修理</span>
-              <kbd className="ml-0.5 text-[9px] opacity-40 font-mono">E</kbd>
-            </button>
-
-            <button
-              onClick={onWait}
-              disabled={!canAct}
-              className="btn-tactical py-1.5 px-2.5 gap-1 text-xs disabled:opacity-30 disabled:cursor-not-allowed"
-              title="待機 [R]"
-            >
-              <Clock className="w-3.5 h-3.5" />
-              <span>待機</span>
-              <kbd className="ml-0.5 text-[9px] opacity-40 font-mono">R</kbd>
-            </button>
-          </div>
-
-          <div className="h-4 w-px bg-border-subtle" />
-
           {/* Unacted count */}
           <div className="readout text-xs text-text-dim shrink-0">
             未行動 <span className={`font-bold ${unactedCount === 0 ? "text-alert-success" : "text-accent-cyan"}`}>{unactedCount}</span> 部隊

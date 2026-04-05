@@ -2,9 +2,11 @@
 
 import { Move, Swords, Wrench, Clock, X } from "lucide-react";
 import type { GameUnit } from "@/lib/game-types";
+import { calculateDamage, getAttackRange, getTypeAdvantage } from "@/lib/combat-rules";
 
 interface ActionLauncherProps {
   unit: GameUnit | null;
+  enemies?: GameUnit[];
   canAct: boolean;
   canRepair: boolean;
   hasNearbyEnemies: boolean;
@@ -17,6 +19,7 @@ interface ActionLauncherProps {
 
 export default function ActionLauncher({
   unit,
+  enemies = [],
   canAct,
   canRepair,
   hasNearbyEnemies,
@@ -27,6 +30,32 @@ export default function ActionLauncher({
   onClose,
 }: ActionLauncherProps) {
   if (!unit || unit.faction !== "player" || !canAct) return null;
+
+  // Find best enemy in range for attack prediction
+  const range = unit.range ?? getAttackRange(unit.type);
+  const inRangeEnemies = enemies.filter(e => {
+    if (e.status === "destroyed") return false;
+    const dLat = e.lat - unit.lat;
+    const dLng = e.lng - unit.lng;
+    return Math.sqrt(dLat * dLat + dLng * dLng) <= range;
+  });
+  const attackPrediction = inRangeEnemies.length > 0 ? (() => {
+    // Find weakest enemy with advantage if possible
+    const sorted = [...inRangeEnemies].sort((a, b) => {
+      const advA = getTypeAdvantage(unit.type, a.type);
+      const advB = getTypeAdvantage(unit.type, b.type);
+      if (advA !== advB) return advB - advA;
+      return a.hp - b.hp;
+    });
+    const target = sorted[0];
+    const dmg = calculateDamage(unit, target, false);
+    return {
+      target,
+      damage: dmg.damage,
+      advantage: dmg.advantage,
+      wouldDestroy: target.hp <= dmg.damage,
+    };
+  })() : null;
 
   const actions = [
     {
@@ -43,7 +72,9 @@ export default function ActionLauncher({
     {
       key: "attack",
       label: "攻撃",
-      hint: hasNearbyEnemies ? "射程内の敵を攻撃" : "射程内に敵なし",
+      hint: attackPrediction
+        ? `${attackPrediction.target.name}へ ${attackPrediction.damage}DMG${attackPrediction.wouldDestroy ? " (撃破!)" : ""}${attackPrediction.advantage === "strong" ? " 有利" : attackPrediction.advantage === "weak" ? " 不利" : ""}`
+        : "射程内に敵なし",
       icon: Swords,
       color: "text-alert-critical",
       bg: "bg-alert-critical/10 border-alert-critical/30 hover:bg-alert-critical/20",
