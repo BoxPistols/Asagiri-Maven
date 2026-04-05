@@ -10,6 +10,8 @@ import { useGameSoundEffects } from "@/hooks/useGameSoundEffects";
 import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
 import GameHud from "@/components/GameHud";
 import TacticalMap from "@/components/TacticalMap";
+import dynamic from "next/dynamic";
+const CesiumGameMap = dynamic(() => import("@/components/CesiumGameMap"), { ssr: false });
 import PhaseIndicator from "@/components/PhaseIndicator";
 import IntelDrawer from "@/components/IntelDrawer";
 import GameOverlay from "@/components/GameOverlay";
@@ -222,6 +224,18 @@ export default function Dashboard() {
   const [dispatchError, setDispatchError] = useState<string | null>(null);
   // Start false to avoid hydration mismatch; enable on client via useEffect
   const [showTutorial, setShowTutorial] = useState<boolean>(false);
+  const [mapView, setMapView] = useState<"2d" | "3d">("2d");
+  useEffect(() => {
+    const saved = localStorage.getItem("maven-map-view");
+    if (saved === "3d") setMapView("3d");
+  }, []);
+  const toggleMapView = useCallback(() => {
+    setMapView(prev => {
+      const next = prev === "2d" ? "3d" : "2d";
+      localStorage.setItem("maven-map-view", next);
+      return next;
+    });
+  }, []);
   useEffect(() => {
     if (localStorage.getItem("maven-tutorial-done") !== "true") {
       setShowTutorial(true);
@@ -541,27 +555,42 @@ export default function Dashboard() {
               turnPhase={state.turnPhase}
               onPause={handlePause}
               onResume={handleResume}
+              mapView={mapView}
+              onToggleView={toggleMapView}
             />
           )}
 
           {/* Full-screen map area with floating overlays */}
           <div className="flex-1 relative min-h-0">
             {/* Map fills entire area */}
-            <TacticalMap
-              onSelectMarker={handleSelectMarker}
-              onMarkerClick={handleMarkerClick}
-              markers={playerMarkers}
-              enemyUnits={state.enemyUnits}
-              playerUnits={state.playerUnits}
-              selectedUnitId={selectedUnit?.id ?? null}
-              targetingMode={targetingMode || attackMode}
-              turnPhase={state.turnPhase}
-              onMapClick={handleMapClick}
-              actedUnitIds={actedUnitIds}
-              combatLog={state.log}
-              currentTurn={state.turn}
-              focusTarget={focusTarget}
-            />
+            {mapView === "2d" ? (
+              <TacticalMap
+                onSelectMarker={handleSelectMarker}
+                onMarkerClick={handleMarkerClick}
+                markers={playerMarkers}
+                enemyUnits={state.enemyUnits}
+                playerUnits={state.playerUnits}
+                selectedUnitId={selectedUnit?.id ?? null}
+                targetingMode={targetingMode || attackMode}
+                turnPhase={state.turnPhase}
+                onMapClick={handleMapClick}
+                actedUnitIds={actedUnitIds}
+                combatLog={state.log}
+                currentTurn={state.turn}
+                focusTarget={focusTarget}
+              />
+            ) : (
+              <CesiumGameMap
+                playerUnits={state.playerUnits}
+                enemyUnits={state.enemyUnits}
+                selectedUnitId={selectedUnit?.id ?? null}
+                actedUnitIds={actedUnitIds}
+                turnPhase={state.turnPhase}
+                onUnitClick={handleMarkerClick}
+                onMapClick={handleMapClick}
+                focusTarget={focusTarget}
+              />
+            )}
 
             {/* Phase indicator -- top center, floating over map */}
             {isPlaying && (
