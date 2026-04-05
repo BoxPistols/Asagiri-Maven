@@ -369,6 +369,18 @@ export default function TacticalMap({
       });
   }, [enemyUnits]);
 
+  // Repair zones: 0.5 degree radius around each living base (where units can repair)
+  const repairZones = useMemo(() => {
+    if (!playerUnits) return [];
+    return playerUnits
+      .filter(u => u.id.startsWith("base-") && u.status !== "destroyed")
+      .map(b => ({
+        id: `repair-${b.id}`,
+        center: [b.lat, b.lng] as [number, number],
+        radiusM: degreesToMeters(0.5),
+      }));
+  }, [playerUnits]);
+
   // Supply lines between bases (within ~6 degrees)
   const supplyLines = useMemo(() => {
     if (!playerUnits) return [];
@@ -417,25 +429,33 @@ export default function TacticalMap({
     const isBase = unit.id.startsWith("base-");
 
     if (isBase) {
-      // Larger, more distinctive base marker
+      // Supply income per base
+      const SUPPLY: Record<string, number> = {
+        "base-tokyo": 15, "base-osaka": 10, "base-nagoya": 10,
+        "base-fukuoka": 7, "base-sapporo": 7,
+      };
+      const supplyIn = SUPPLY[unit.id] ?? 5;
+      const damaged = hpRatio < 0.5;
+      const effective = damaged ? Math.floor(supplyIn / 2) : supplyIn;
       const coreColor = hpPercent > 60 ? "#22d3ee" : hpPercent > 30 ? "#fbbf24" : "#f87171";
       const selectedGlow = isSelected
         ? `box-shadow: 0 0 0 3px rgba(34,211,238,0.7), 0 0 22px rgba(34,211,238,0.45);`
         : `box-shadow: 0 0 0 2px rgba(34,211,238,0.35), 0 0 12px rgba(34,211,238,0.25);`;
       const html = `
-        <div style="position:relative;display:flex;align-items:center;justify-content:center;width:52px;height:52px;">
-          <div style="position:absolute;width:52px;height:52px;border-radius:14px;background:linear-gradient(135deg,#0f172a 0%,#1e293b 100%);border:2px solid ${coreColor};${selectedGlow};display:flex;align-items:center;justify-content:center;">
-            <span style="font-family:var(--font-mono);font-size:20px;font-weight:900;color:${coreColor};text-shadow:0 0 4px rgba(0,0,0,0.8);">★</span>
+        <div style="position:relative;display:flex;align-items:center;justify-content:center;width:56px;height:56px;">
+          <div style="position:absolute;width:56px;height:56px;border-radius:14px;background:linear-gradient(135deg,#0f172a 0%,#1e293b 100%);border:2px solid ${coreColor};${selectedGlow};display:flex;flex-direction:column;align-items:center;justify-content:center;">
+            <span style="font-family:var(--font-mono);font-size:18px;font-weight:900;color:${coreColor};text-shadow:0 0 4px rgba(0,0,0,0.8);line-height:1;">★</span>
+            <span style="font-family:var(--font-mono);font-size:9px;font-weight:700;color:${coreColor};margin-top:1px;">+${effective}/T</span>
           </div>
-          <div style="position:absolute;bottom:-6px;left:50%;transform:translateX(-50%);background:${coreColor};color:#0f172a;font-family:var(--font-mono);font-size:9px;font-weight:bold;padding:1px 4px;border-radius:2px;letter-spacing:0.5px;">HQ ${hpPercent}%</div>
+          <div style="position:absolute;bottom:-8px;left:50%;transform:translateX(-50%);background:${coreColor};color:#0f172a;font-family:var(--font-mono);font-size:9px;font-weight:bold;padding:1px 4px;border-radius:2px;letter-spacing:0.3px;white-space:nowrap;">HQ ${hpPercent}%</div>
         </div>
       `;
       return L.divIcon({
         className: `custom-marker unit-marker unit-marker-base`,
         html,
-        iconSize: [52, 58],
-        iconAnchor: [26, 26],
-        popupAnchor: [0, -28],
+        iconSize: [56, 64],
+        iconAnchor: [28, 28],
+        popupAnchor: [0, -30],
       });
     }
 
@@ -654,6 +674,23 @@ export default function TacticalMap({
                     weight: 1,
                     opacity: 0.22,
                     dashArray: "3 8",
+                  }}
+                />
+              ))}
+
+              {/* === Repair zones around bases === */}
+              {repairZones.map(zone => (
+                <Circle
+                  key={zone.id}
+                  center={zone.center}
+                  radius={zone.radiusM}
+                  pathOptions={{
+                    color: "#34d399",
+                    weight: 1,
+                    opacity: 0.25,
+                    fillColor: "#34d399",
+                    fillOpacity: 0.04,
+                    dashArray: "4 6",
                   }}
                 />
               ))}

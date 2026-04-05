@@ -19,6 +19,7 @@ import DamagePopup, { combatEffectsToDamageEvents } from "@/components/DamagePop
 import UnitDetailPanel from "@/components/UnitDetailPanel";
 import ActionLauncher from "@/components/ActionLauncher";
 import UnactedUnitsPanel from "@/components/UnactedUnitsPanel";
+import MapLegend from "@/components/MapLegend";
 import TargetingOverlay from "@/components/TargetingOverlay";
 import CombatToast from "@/components/CombatToast";
 import MissionObjectives from "@/components/MissionObjectives";
@@ -459,9 +460,10 @@ export default function Dashboard() {
         || selectedUnit.faction !== "player"
         || selectedUnit.actedThisTurn
         || state.turnPhase !== "player") return;
-    // Arrow = 1 step (not the full move range)
-    const stepSize = selectedUnit.stepDistance ?? selectedUnit.speed;
-    if (!stepSize || stepSize <= 0) return;
+    // Arrow = half step for finer control
+    const fullStep = selectedUnit.stepDistance ?? selectedUnit.speed;
+    if (!fullStep || fullStep <= 0) return;
+    const stepSize = fullStep * 0.5;
     const newLat = selectedUnit.lat + dy * stepSize;
     const newLng = selectedUnit.lng + dx * stepSize;
     audio.playMove();
@@ -630,6 +632,9 @@ export default function Dashboard() {
                 waveName={waveConfig?.name ?? ""}
               />
             )}
+
+            {/* Map legend (collapsible) */}
+            {isPlaying && <MapLegend />}
 
             {/* Unacted units panel — always visible during player phase */}
             {isPlaying && state.turnPhase === "player" && (
