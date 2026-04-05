@@ -18,6 +18,7 @@ import UnitDetailPanel from "@/components/UnitDetailPanel";
 import TargetingOverlay from "@/components/TargetingOverlay";
 import ResizeHandle from "@/components/ResizeHandle";
 import { WAVE_CONFIGS } from "@/lib/scenarios";
+import { isNearFriendlyFacility } from "@/lib/combat-rules";
 import type {
   GameEvent,
   GameUnit,
@@ -31,12 +32,11 @@ import type { AlertItem, MapMarker, KpiData, WorkflowCard, ChatMessage, Severity
 
 const MIN_PANEL = 80;
 
-function SidebarPanels({ alerts, workflowCards, chatMessages, onSelectMarker, onDispatch, onAdvanceMission }: {
+function SidebarPanels({ alerts, workflowCards, chatMessages, onSelectMarker, onAdvanceMission }: {
   alerts: AlertItem[];
   workflowCards: WorkflowCard[];
   chatMessages: ChatMessage[];
   onSelectMarker: (id: string | null) => void;
-  onDispatch: (eventId: string) => void;
   onAdvanceMission: (missionId: string) => void;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -76,7 +76,6 @@ function SidebarPanels({ alerts, workflowCards, chatMessages, onSelectMarker, on
         <AiTriage
           onSelectMarker={onSelectMarker}
           alerts={alerts}
-          onDispatch={onDispatch}
         />
       </div>
       <ResizeHandle onResize={handleResize1} />
@@ -223,39 +222,53 @@ export default function Dashboard() {
   const prevTurnRef = useRef(state.turn);
   const prevWaveRef = useRef(state.wave);
   const [showTurnTransition, setShowTurnTransition] = useState(false);
-  const [transitionMeta, setTransitionMeta] = useState({
+  const [transitionMeta, setTransitionMeta] = useState<{
+    turn: number;
+    wave: number;
+    type: "player_phase" | "enemy_phase" | "wave_start" | "resolution";
+  }>({
     turn: 1,
     wave: 1,
-    hasCombat: false,
-    waveChanged: false,
+    type: "player_phase",
   });
 
+  // Show transition when turnPhase changes
+  const prevTurnPhaseRef = useRef(state.turnPhase);
   useEffect(() => {
-    if (state.turn !== prevTurnRef.current && state.phase === "playing") {
-      // Detect combat: any log entry with role "combat" for the current turn
-      const hasCombat = state.log.some(
-        (l) => l.role === "combat" && l.turn === state.turn,
-      );
-      const waveChanged = state.wave !== prevWaveRef.current;
+    if (state.phase !== "playing") {
+      prevTurnPhaseRef.current = state.turnPhase;
+      return;
+    }
 
-      setTransitionMeta({
-        turn: state.turn,
-        wave: state.wave,
-        hasCombat,
-        waveChanged,
-      });
+    if (state.turnPhase !== prevTurnPhaseRef.current) {
+      const waveChanged = state.wave !== prevWaveRef.current;
+      let type: typeof transitionMeta.type = "player_phase";
+      if (waveChanged) {
+        type = "wave_start";
+      } else if (state.turnPhase === "player") {
+        type = "player_phase";
+      } else if (state.turnPhase === "enemy") {
+        type = "enemy_phase";
+      } else if (state.turnPhase === "resolution") {
+        type = "resolution";
+      }
+
+      setTransitionMeta({ turn: state.turn, wave: state.wave, type });
       setShowTurnTransition(true);
 
-      // Auto-hide after animation completes (0.8s)
-      const timer = setTimeout(() => setShowTurnTransition(false), 850);
+      const duration = type === "wave_start" ? 1600 : 800;
+      const timer = setTimeout(() => setShowTurnTransition(false), duration);
 
+      prevTurnPhaseRef.current = state.turnPhase;
       prevTurnRef.current = state.turn;
       prevWaveRef.current = state.wave;
       return () => clearTimeout(timer);
     }
+
+    prevTurnPhaseRef.current = state.turnPhase;
     prevTurnRef.current = state.turn;
     prevWaveRef.current = state.wave;
-  }, [state.turn, state.wave, state.phase, state.log]);
+  }, [state.turnPhase, state.turn, state.wave, state.phase]);
 
   // --- Combat visual effects ---
   const combatEffects = useCombatEffects(
@@ -269,9 +282,11 @@ export default function Dashboard() {
     [combatEffects],
   );
 
-  // --- Unit selection & targeting ---
+  // --- Unit selection & interaction modes ---
   const [selectedUnit, setSelectedUnit] = useState<GameUnit | null>(null);
   const [targetingMode, setTargetingMode] = useState(false);
+  const [moveMode, setMoveMode] = useState(false);
+  const [attackMode, setAttackMode] = useState(false);
 
   const handleSelectMarker = useCallback((id: string | null) => {
     setSelectedMarker(id);
@@ -279,17 +294,22 @@ export default function Dashboard() {
   }, [dispatch]);
 
   const handleMarkerClick = useCallback((id: string) => {
-    // In targeting mode, clicking an enemy completes targeting
+    // In attack mode, clicking an enemy dispatches ATTACK_UNIT
+    if (attackMode && selectedUnit) {
+      const isEnemy = state.enemyUnits.some(u => u.id === id && u.status !== "destroyed");
+      if (isEnemy) {
+        dispatch({ type: "ATTACK_UNIT", unitId: selectedUnit.id, targetId: id });
+        setAttackMode(false);
+        return;
+      }
+    }
+
+    // In targeting mode (legacy), clicking an enemy completes targeting
     if (targetingMode && selectedUnit) {
       const isEnemy = state.enemyUnits.some(u => u.id === id && u.status !== "destroyed");
       if (isEnemy) {
-        dispatch({ type: "ASSIGN_TARGET", unitId: selectedUnit.id, targetUnitId: id });
+        dispatch({ type: "ATTACK_UNIT", unitId: selectedUnit.id, targetId: id });
         setTargetingMode(false);
-        // Keep selected unit updated with new status
-        const updatedUnit = state.playerUnits.find(u => u.id === selectedUnit.id);
-        if (updatedUnit) {
-          setSelectedUnit({ ...updatedUnit, status: "moving", targetId: id });
-        }
         return;
       }
     }
@@ -300,20 +320,60 @@ export default function Dashboard() {
     if (unit) {
       setSelectedUnit(unit);
       setTargetingMode(false);
+      setMoveMode(false);
+      setAttackMode(false);
     }
-  }, [targetingMode, selectedUnit, state.enemyUnits, state.playerUnits, dispatch]);
+  }, [attackMode, targetingMode, selectedUnit, state.enemyUnits, state.playerUnits, dispatch]);
 
-  const handleAssignTarget = useCallback((_unitId: string) => {
-    setTargetingMode(true);
+  // Map click handler (for movement)
+  const handleMapClick = useCallback((lat: number, lng: number) => {
+    if (moveMode && selectedUnit && !selectedUnit.actedThisTurn && state.turnPhase === "player") {
+      dispatch({ type: "MOVE_UNIT", unitId: selectedUnit.id, lat, lng });
+      setMoveMode(false);
+    }
+  }, [moveMode, selectedUnit, state.turnPhase, dispatch]);
+
+  // Action mode toggles
+  const handleEnterMoveMode = useCallback(() => {
+    setMoveMode(true);
+    setAttackMode(false);
+    setTargetingMode(false);
   }, []);
+
+  const handleEnterAttackMode = useCallback(() => {
+    setAttackMode(true);
+    setMoveMode(false);
+    setTargetingMode(true); // use targeting overlay for attack mode
+  }, []);
+
+  const handleRepair = useCallback(() => {
+    if (selectedUnit) {
+      dispatch({ type: "REPAIR_UNIT", unitId: selectedUnit.id });
+    }
+  }, [selectedUnit, dispatch]);
+
+  const handleWait = useCallback(() => {
+    if (selectedUnit) {
+      dispatch({ type: "WAIT_UNIT", unitId: selectedUnit.id });
+    }
+  }, [selectedUnit, dispatch]);
 
   const handleCancelTargeting = useCallback(() => {
     setTargetingMode(false);
+    setAttackMode(false);
   }, []);
 
   const handleCloseDetail = useCallback(() => {
     setSelectedUnit(null);
     setTargetingMode(false);
+    setMoveMode(false);
+    setAttackMode(false);
+  }, []);
+
+  const handleAssignTarget = useCallback((_unitId: string) => {
+    setTargetingMode(true);
+    setMoveMode(false);
+    setAttackMode(false);
   }, []);
 
   // Keep selectedUnit data fresh across turns
@@ -348,26 +408,56 @@ export default function Dashboard() {
   const playerMarkers = useMemo(() => gameUnitsToMarkers(state.playerUnits), [state.playerUnits]);
 
   // Handlers
-  const handleNextTurn = useCallback(() => dispatch({ type: "NEXT_TURN" }), [dispatch]);
+  const handleEndPlayerPhase = useCallback(() => dispatch({ type: "END_PLAYER_PHASE" }), [dispatch]);
   const handlePause = useCallback(() => dispatch({ type: "PAUSE" }), [dispatch]);
   const handleResume = useCallback(() => dispatch({ type: "RESUME" }), [dispatch]);
   const handleStart = useCallback(() => dispatch({ type: "START_GAME" }), [dispatch]);
   const handleRestart = useCallback(() => dispatch({ type: "START_GAME" }), [dispatch]);
-  const [dispatchError, setDispatchError] = useState<string | null>(null);
-  const handleDispatch = useCallback((eventId: string) => {
-    const mobileUnits = state.playerUnits.filter(u => u.speed > 0);
-    const idleUnit = mobileUnits.find(u => u.status === "idle");
-    if (!idleUnit) {
-      setDispatchError("待機中の機動部隊がありません");
-      setTimeout(() => setDispatchError(null), 2500);
-      return;
+
+  // Auto-cycle: when turnPhase is "enemy", process enemy phase after a short delay
+  useEffect(() => {
+    if (state.phase !== "playing") return;
+    if (state.turnPhase === "enemy") {
+      const timer = setTimeout(() => {
+        dispatch({ type: "PROCESS_ENEMY_PHASE" });
+      }, 800);
+      return () => clearTimeout(timer);
     }
-    setDispatchError(null);
-    dispatch({ type: "DISPATCH_UNIT", unitId: idleUnit.id, eventId });
-  }, [dispatch, state.playerUnits]);
-  const handleAdvanceMission = useCallback((id: string) => {
-    dispatch({ type: "APPROVE_MISSION", missionId: id });
-  }, [dispatch]);
+    if (state.turnPhase === "resolution") {
+      const timer = setTimeout(() => {
+        dispatch({ type: "PROCESS_RESOLUTION" });
+      }, 600);
+      return () => clearTimeout(timer);
+    }
+  }, [state.turnPhase, state.phase, dispatch]);
+
+  // Count unacted mobile player units (speed > 0, not destroyed, not yet acted)
+  const unactedCount = useMemo(() =>
+    state.playerUnits.filter(u =>
+      u.status !== "destroyed" && u.speed > 0 && !u.actedThisTurn
+    ).length,
+    [state.playerUnits],
+  );
+
+  // Compute acted unit IDs for TacticalMap dimming
+  const actedUnitIds = useMemo(() =>
+    state.playerUnits.filter(u => u.actedThisTurn).map(u => u.id),
+    [state.playerUnits],
+  );
+
+  // Can selected unit be repaired? (near facility, damaged, enough supply)
+  const canRepair = useMemo(() => {
+    if (!selectedUnit) return false;
+    if (selectedUnit.faction !== "player") return false;
+    if (selectedUnit.hp >= selectedUnit.maxHp) return false;
+    if (selectedUnit.status === "destroyed") return false;
+    if (state.supply < 10) return false;
+    return isNearFriendlyFacility(selectedUnit, state.playerUnits);
+  }, [selectedUnit, state.playerUnits, state.supply]);
+
+  const handleAdvanceMission = useCallback((_id: string) => {
+    // Missions auto-resolve when linked enemies are destroyed.
+  }, []);
 
   const waveConfig = useMemo(() => {
     const cfg = WAVE_CONFIGS[state.wave - 1];
@@ -399,7 +489,10 @@ export default function Dashboard() {
                   enemyUnits={state.enemyUnits}
                   playerUnits={state.playerUnits}
                   selectedUnitId={selectedUnit?.id ?? null}
-                  targetingMode={targetingMode}
+                  targetingMode={targetingMode || attackMode}
+                  turnPhase={state.turnPhase}
+                  onMapClick={handleMapClick}
+                  actedUnitIds={actedUnitIds}
                 >
                   {state.phase === "playing" || state.phase === "paused" ? (
                     <GameControls
@@ -407,24 +500,36 @@ export default function Dashboard() {
                       maxTurns={state.maxTurns}
                       wave={state.wave}
                       phase={state.phase}
-                      onNextTurn={handleNextTurn}
+                      turnPhase={state.turnPhase}
+                      supply={state.supply}
+                      selectedUnit={selectedUnit}
+                      unactedCount={unactedCount}
+                      canRepair={canRepair}
+                      onMove={handleEnterMoveMode}
+                      onAttack={handleEnterAttackMode}
+                      onRepair={handleRepair}
+                      onWait={handleWait}
+                      onEndPlayerPhase={handleEndPlayerPhase}
+                      onProcessEnemy={() => dispatch({ type: "PROCESS_ENEMY_PHASE" })}
+                      onProcessResolution={() => dispatch({ type: "PROCESS_RESOLUTION" })}
                       onPause={handlePause}
                       onResume={handleResume}
                     />
                   ) : null}
                   <UnitDetailPanel
                     unit={selectedUnit}
-                    onAssignTarget={handleAssignTarget}
                     onClose={handleCloseDetail}
+                    canRepair={canRepair}
                     targetName={selectedTargetName}
                   />
                   <TargetingOverlay
-                    active={targetingMode}
+                    active={targetingMode || attackMode}
                     sourceUnit={selectedUnit}
                     onSelectTarget={(targetId) => {
                       if (selectedUnit) {
-                        dispatch({ type: "ASSIGN_TARGET", unitId: selectedUnit.id, targetUnitId: targetId });
+                        dispatch({ type: "ATTACK_UNIT", unitId: selectedUnit.id, targetId });
                         setTargetingMode(false);
+                        setAttackMode(false);
                       }
                     }}
                     onCancel={handleCancelTargeting}
@@ -440,7 +545,6 @@ export default function Dashboard() {
               workflowCards={workflowCards}
               chatMessages={chatMessages}
               onSelectMarker={handleSelectMarker}
-              onDispatch={handleDispatch}
               onAdvanceMission={handleAdvanceMission}
             />
           </div>
@@ -458,20 +562,12 @@ export default function Dashboard() {
             </div>
           </div>
 
-          {/* Dispatch error toast */}
-          {dispatchError && (
-            <div className="fixed bottom-12 left-1/2 -translate-x-1/2 z-[2000] readout text-xs bg-alert-critical/90 text-white px-4 py-2 rounded-md animate-slide-up">
-              {dispatchError}
-            </div>
-          )}
-
           {/* Turn transition flash */}
           <TurnTransition
             turn={transitionMeta.turn}
             wave={transitionMeta.wave}
             show={showTurnTransition}
-            hasCombat={transitionMeta.hasCombat}
-            waveChanged={transitionMeta.waveChanged}
+            type={transitionMeta.type}
           />
 
           {/* Game overlay for briefing / victory / defeat */}

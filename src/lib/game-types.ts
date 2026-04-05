@@ -28,7 +28,10 @@ export interface GameUnit {
   targetId?: string;   // mission or enemy id
   detail: string;
   range?: number;      // override default attack range from type
+  actedThisTurn: boolean;  // has this unit used its action this turn?
 }
+
+export type TurnPhase = "player" | "enemy" | "resolution";
 
 export interface GameEvent {
   id: string;
@@ -63,9 +66,10 @@ export interface WaveConfig {
   description: string;
   turns: number;       // how many turns this wave lasts
   events: Omit<GameEvent, "id" | "turn" | "resolved">[];
-  spawnUnits: Omit<GameUnit, "id" | "status">[];
+  spawnUnits: Omit<GameUnit, "id" | "status" | "actedThisTurn">[];
   briefing: string;    // AI chat message at wave start
   intel: string[];     // periodic intel messages
+  supplyBonus: number; // supply awarded on wave clear
 }
 
 export interface GameState {
@@ -73,6 +77,8 @@ export interface GameState {
   wave: number;        // 1-5
   turn: number;
   maxTurns: number;    // total turns across all waves
+  turnPhase: TurnPhase;
+  supply: number;      // resource pool, used for repairs/reinforcements
   kpis: GameKpis;
   playerUnits: GameUnit[];
   enemyUnits: GameUnit[];
@@ -93,11 +99,15 @@ export interface GameLogEntry {
 
 export type GameAction =
   | { type: "START_GAME" }
-  | { type: "NEXT_TURN" }
   | { type: "PAUSE" }
   | { type: "RESUME" }
-  | { type: "DISPATCH_UNIT"; unitId: string; eventId: string }
-  | { type: "APPROVE_MISSION"; missionId: string }
+  | { type: "MOVE_UNIT"; unitId: string; lat: number; lng: number }
+  | { type: "ATTACK_UNIT"; unitId: string; targetId: string }
+  | { type: "REPAIR_UNIT"; unitId: string }
+  | { type: "WAIT_UNIT"; unitId: string }
+  | { type: "END_PLAYER_PHASE" }
+  | { type: "PROCESS_ENEMY_PHASE" }
+  | { type: "PROCESS_RESOLUTION" }
   | { type: "ASSIGN_TARGET"; unitId: string; targetUnitId: string }
   | { type: "SELECT_UNIT"; unitId: string | null }
   | { type: "SELECT_EVENT"; eventId: string | null };

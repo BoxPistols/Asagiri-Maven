@@ -7,15 +7,20 @@ import type {
   GameEvent,
   GameUnit,
   GameLogEntry,
-  Mission,
   GameKpis,
 } from "@/lib/game-types";
 import { createInitialGameState, WAVE_CONFIGS } from "@/lib/game-init";
 import {
   generateEnemyActions,
-  moveEnemyUnits,
-  resolveEngagements,
+  processEnemyTurn,
 } from "@/lib/enemy-ai";
+import {
+  calculateDamage,
+  isInRange,
+  isNearFriendlyFacility,
+  getAttackRange,
+} from "@/lib/combat-rules";
+import { formatCombatLog } from "@/lib/combat-log-formatter";
 import { pickIntelMessage } from "@/lib/intel-scripts";
 
 // ---------------------------------------------------------------------------
@@ -84,10 +89,10 @@ function turnStartForWave(wave: number): number {
 }
 
 // ---------------------------------------------------------------------------
-// Sub-reducers for NEXT_TURN
+// Resolution sub-helpers
 // ---------------------------------------------------------------------------
 
-/** 1. Spawn wave events */
+/** Spawn wave events */
 function spawnEvents(state: GameState): { events: GameEvent[]; log: GameLogEntry[] } {
   const waveConfig = getWaveConfig(state.wave);
   const newEvents = generateEnemyActions(state, waveConfig);
@@ -97,8 +102,8 @@ function spawnEvents(state: GameState): { events: GameEvent[]; log: GameLogEntry
   return { events: [...state.events, ...newEvents], log };
 }
 
-/** 2. Spawn enemy units for current wave + move existing */
-function processEnemyUnits(state: GameState): {
+/** Spawn enemy units for current wave */
+function spawnEnemyUnits(state: GameState): {
   enemyUnits: GameUnit[];
   log: GameLogEntry[];
 } {
@@ -106,13 +111,13 @@ function processEnemyUnits(state: GameState): {
   const turnInWave = state.turn - turnStartForWave(state.wave);
   const log: GameLogEntry[] = [];
 
-  // Spawn wave units on first turn of the wave
   let units = [...state.enemyUnits];
   if (turnInWave === 0) {
     const spawned: GameUnit[] = waveConfig.spawnUnits.map((tmpl, i) => ({
       ...tmpl,
       id: `enemy-w${state.wave}-${i}-${uid().slice(0, 6)}`,
       status: "moving" as const,
+      actedThisTurn: false,
     }));
     units = [...units, ...spawned];
     for (const u of spawned) {
@@ -120,91 +125,10 @@ function processEnemyUnits(state: GameState): {
     }
   }
 
-  // Move all living enemies
-  const stateWithEnemies: GameState = { ...state, enemyUnits: units };
-  const moved = moveEnemyUnits(stateWithEnemies);
-
-  return { enemyUnits: moved, log };
+  return { enemyUnits: units, log };
 }
 
-/** 3. Progress missions based on proximity */
-function progressMissions(state: GameState): {
-  missions: Mission[];
-  playerUnits: GameUnit[];
-  log: GameLogEntry[];
-} {
-  const missions = state.missions.map((m) => ({ ...m }));
-  const playerUnits = state.playerUnits.map((u) => ({ ...u }));
-  const log: GameLogEntry[] = [];
-
-  const ENGAGE_RANGE = 0.15;
-
-  for (const mission of missions) {
-    if (mission.stage === "resolved") continue;
-
-    const event = state.events.find((e) => e.id === mission.eventId);
-    if (!event) continue;
-
-    const assignedUnits = playerUnits.filter((u) =>
-      mission.assignedUnitIds.includes(u.id),
-    );
-
-    if (assignedUnits.length === 0) continue;
-
-    if (mission.stage === "detected" || mission.stage === "dispatched") {
-      // Move units toward event location
-      let anyClose = false;
-      for (const unit of assignedUnits) {
-        if (unit.status === "destroyed") continue;
-        const d = distance(unit, event);
-        if (d < ENGAGE_RANGE) {
-          anyClose = true;
-          unit.status = "engaging";
-        } else {
-          // Move toward event
-          const step = Math.min(unit.speed, d);
-          const ratio = step / d;
-          unit.lat += (event.lat - unit.lat) * ratio;
-          unit.lng += (event.lng - unit.lng) * ratio;
-          unit.status = "moving";
-        }
-      }
-
-      if (anyClose && mission.stage !== "dispatched") {
-        mission.stage = "dispatched";
-        log.push(makeLog("system", `ミッション「${mission.title}」部隊到着`, state.turn));
-      }
-      if (anyClose) {
-        mission.stage = "engaging";
-        log.push(
-          makeLog("combat", `ミッション「${mission.title}」交戦開始`, state.turn),
-        );
-      }
-    }
-
-    if (mission.stage === "engaging") {
-      // Check if all linked enemy units are destroyed
-      const linkedEnemies = state.enemyUnits.filter((u) =>
-        event.linkedUnitIds.includes(u.id),
-      );
-      const allDead =
-        linkedEnemies.length === 0 ||
-        linkedEnemies.every((u) => u.status === "destroyed");
-
-      if (allDead) {
-        mission.stage = "resolved";
-        mission.outcome = "success";
-        log.push(
-          makeLog("system", `ミッション「${mission.title}」成功！`, state.turn),
-        );
-      }
-    }
-  }
-
-  return { missions, playerUnits, log };
-}
-
-/** 4. Apply KPI drain from unresolved events */
+/** Apply KPI drain from unresolved events */
 function applyKpiDrain(state: GameState): GameKpis {
   const kpis = { ...state.kpis };
 
@@ -214,7 +138,6 @@ function applyKpiDrain(state: GameState): GameKpis {
     const drain = event.severity === "critical" ? 5 : event.severity === "warning" ? 2 : 0;
     if (drain === 0) continue;
 
-    // Distribute drain across KPIs based on event type
     switch (event.type) {
       case "attack":
         kpis.combat = clampKpi(kpis.combat - drain);
@@ -245,7 +168,7 @@ function applyKpiDrain(state: GameState): GameKpis {
   return kpis;
 }
 
-/** 5. Mark events as resolved when all linked enemies destroyed or mission complete */
+/** Mark events as resolved when all linked enemies destroyed */
 function resolveEvents(state: GameState): GameEvent[] {
   return state.events.map((event) => {
     if (event.resolved) return event;
@@ -269,7 +192,7 @@ function resolveEvents(state: GameState): GameEvent[] {
   });
 }
 
-/** 6. Check win/lose */
+/** Check win/lose */
 function checkEndConditions(state: GameState): "victory" | "defeat" | null {
   // Defeat: any KPI at 0
   const kpiValues = Object.values(state.kpis) as number[];
@@ -291,16 +214,14 @@ function checkEndConditions(state: GameState): "victory" | "defeat" | null {
   return null;
 }
 
-/** 7. Auto-advance wave */
+/** Auto-advance wave */
 function shouldAdvanceWave(state: GameState): boolean {
   const waveConfig = getWaveConfig(state.wave);
   const waveStart = turnStartForWave(state.wave);
   const turnsIntoWave = state.turn - waveStart;
 
-  // Must have completed the required turns for this wave
   if (turnsIntoWave < waveConfig.turns - 1) return false;
 
-  // All events for this wave should be resolved
   const waveEvents = state.events.filter(
     (e) => e.turn >= waveStart && e.turn < waveStart + waveConfig.turns,
   );
@@ -323,71 +244,313 @@ function gameReducer(state: GameState, action: GameAction): GameState {
         ...initial,
         phase: "playing",
         turn: 1,
+        turnPhase: "player" as const,
+        supply: 200,
+        playerUnits: initial.playerUnits.map((u) => ({
+          ...u,
+          actedThisTurn: false,
+        })),
         log: [
           ...initial.log,
           makeLog("system", `=== 第${waveConfig.wave}波: ${waveConfig.name} ===`, 1),
           makeLog("intel", waveConfig.briefing, 1),
+          makeLog("system", "--- プレイヤーフェーズ ---", 1),
         ],
       };
     }
 
-    // ===== NEXT_TURN =====
-    case "NEXT_TURN": {
-      if (state.phase !== "playing") return state;
+    // ===== MOVE_UNIT =====
+    case "MOVE_UNIT": {
+      if (state.phase !== "playing" || state.turnPhase !== "player") return state;
+      const { unitId, lat, lng } = action;
+      const unit = state.playerUnits.find((u) => u.id === unitId);
+      if (!unit) return state;
+      if (unit.status === "destroyed") return state;
+      if (unit.actedThisTurn) return state;
 
-      const nextTurn = state.turn + 1;
-      let s: GameState = { ...state, turn: nextTurn };
-      const allLogs: GameLogEntry[] = [
-        makeLog("system", `--- ターン ${nextTurn} ---`, nextTurn),
-      ];
+      // Check destination is within speed range
+      const dest = { lat, lng };
+      const d = distance(unit, dest);
+      if (d > unit.speed) return state;
+
+      const updatedUnits = state.playerUnits.map((u) =>
+        u.id === unitId
+          ? { ...u, lat, lng, actedThisTurn: true, status: "idle" as const }
+          : u,
+      );
+
+      return {
+        ...state,
+        playerUnits: updatedUnits,
+        log: [
+          ...state.log,
+          makeLog("player", `${unit.name} が [${lat.toFixed(2)}, ${lng.toFixed(2)}] へ移動`, state.turn),
+        ],
+      };
+    }
+
+    // ===== ATTACK_UNIT =====
+    case "ATTACK_UNIT": {
+      if (state.phase !== "playing" || state.turnPhase !== "player") return state;
+      const { unitId, targetId } = action;
+      const unit = state.playerUnits.find((u) => u.id === unitId);
+      const target = state.enemyUnits.find((u) => u.id === targetId);
+      if (!unit || !target) return state;
+      if (unit.status === "destroyed" || target.status === "destroyed") return state;
+      if (unit.actedThisTurn) return state;
+
+      // Range check
+      if (!isInRange(unit, target)) return state;
+
+      const allLogs: GameLogEntry[] = [];
+
+      // --- Attacker hits defender ---
+      const nearFacility = false; // enemies don't have facilities
+      const result = calculateDamage(unit, target, nearFacility);
+      const updatedTarget = { ...target };
+      updatedTarget.hp = Math.max(0, updatedTarget.hp - result.damage);
+      const targetDestroyed = updatedTarget.hp <= 0;
+      if (targetDestroyed) {
+        updatedTarget.status = "destroyed";
+      } else {
+        updatedTarget.status = "engaging";
+      }
+
+      allLogs.push(makeLog("combat",
+        formatCombatLog({
+          attackerName: unit.name,
+          defenderName: target.name,
+          damage: result.damage,
+          advantage: result.advantage,
+          critical: result.critical,
+          defenderDestroyed: targetDestroyed,
+        }),
+        state.turn,
+      ));
+
+      if (result.advantage === "strong") {
+        allLogs.push(makeLog("combat", `  └ 有利な戦闘（${unit.type} → ${target.type}）`, state.turn));
+      } else if (result.advantage === "weak") {
+        allLogs.push(makeLog("combat", `  └ 不利な戦闘（${unit.type} → ${target.type}）`, state.turn));
+      }
+      if (result.critical && !targetDestroyed) {
+        allLogs.push(makeLog("combat", `  └ クリティカルヒット！`, state.turn));
+      }
+
+      // --- Defender counter-attacks if in range and alive ---
+      const updatedAttacker: GameUnit = { ...unit, actedThisTurn: true, status: "engaging" as const, targetId: targetId };
+      if (!targetDestroyed) {
+        const counterRange = updatedTarget.range ?? getAttackRange(updatedTarget.type);
+        const counterDist = distance(updatedTarget, unit);
+        if (counterDist <= counterRange) {
+          const counterResult = calculateDamage(updatedTarget, updatedAttacker, false);
+          updatedAttacker.hp = Math.max(0, updatedAttacker.hp - counterResult.damage);
+          const attackerDestroyed = updatedAttacker.hp <= 0;
+          if (attackerDestroyed) {
+            updatedAttacker.status = "destroyed";
+          }
+
+          allLogs.push(makeLog("combat",
+            formatCombatLog({
+              attackerName: updatedTarget.name,
+              defenderName: updatedAttacker.name,
+              damage: counterResult.damage,
+              advantage: counterResult.advantage,
+              critical: counterResult.critical,
+              defenderDestroyed: attackerDestroyed,
+            }),
+            state.turn,
+          ));
+          if (counterResult.advantage === "strong") {
+            allLogs.push(makeLog("combat", `  └ 反撃有利（${updatedTarget.type} → ${updatedAttacker.type}）`, state.turn));
+          }
+        }
+      }
+
+      if (targetDestroyed) {
+        allLogs.push(makeLog("combat", `${target.name} 撃破`, state.turn));
+      }
+
+      const updatedPlayerUnits = state.playerUnits.map((u) =>
+        u.id === unitId ? updatedAttacker : u,
+      );
+      const updatedEnemyUnits = state.enemyUnits.map((u) =>
+        u.id === targetId ? updatedTarget : u,
+      );
+
+      return {
+        ...state,
+        playerUnits: updatedPlayerUnits,
+        enemyUnits: updatedEnemyUnits,
+        log: [...state.log, ...allLogs],
+      };
+    }
+
+    // ===== REPAIR_UNIT =====
+    case "REPAIR_UNIT": {
+      if (state.phase !== "playing" || state.turnPhase !== "player") return state;
+      const { unitId } = action;
+      const unit = state.playerUnits.find((u) => u.id === unitId);
+      if (!unit) return state;
+      if (unit.status === "destroyed") return state;
+      if (unit.actedThisTurn) return state;
+      if (unit.hp >= unit.maxHp) return state;
+      if (state.supply < 10) return state;
+
+      // Check near a friendly facility (within 0.5 degrees of a base-* unit)
+      const nearBase = state.playerUnits.some(
+        (other) =>
+          other.id !== unit.id &&
+          other.id.startsWith("base-") &&
+          other.status !== "destroyed" &&
+          distance(unit, other) <= 0.5,
+      );
+      if (!nearBase) return state;
+
+      const healedHp = Math.min(unit.maxHp, unit.hp + 30);
+      const actualHeal = healedHp - unit.hp;
+      const updatedUnits = state.playerUnits.map((u) =>
+        u.id === unitId
+          ? { ...u, hp: healedHp, actedThisTurn: true }
+          : u,
+      );
+
+      return {
+        ...state,
+        playerUnits: updatedUnits,
+        supply: state.supply - 10,
+        log: [
+          ...state.log,
+          makeLog("player", `${unit.name} 修理完了 (HP +${actualHeal})`, state.turn),
+        ],
+      };
+    }
+
+    // ===== WAIT_UNIT =====
+    case "WAIT_UNIT": {
+      if (state.phase !== "playing" || state.turnPhase !== "player") return state;
+      const { unitId } = action;
+      const unit = state.playerUnits.find((u) => u.id === unitId);
+      if (!unit) return state;
+      if (unit.status === "destroyed") return state;
+      if (unit.actedThisTurn) return state;
+
+      const updatedUnits = state.playerUnits.map((u) =>
+        u.id === unitId
+          ? { ...u, actedThisTurn: true }
+          : u,
+      );
+
+      return {
+        ...state,
+        playerUnits: updatedUnits,
+        log: [
+          ...state.log,
+          makeLog("player", `${unit.name} 待機`, state.turn),
+        ],
+      };
+    }
+
+    // ===== END_PLAYER_PHASE =====
+    case "END_PLAYER_PHASE": {
+      if (state.phase !== "playing" || state.turnPhase !== "player") return state;
+
+      // Mark any units that haven't acted as "waited"
+      const allLogs: GameLogEntry[] = [];
+      const updatedUnits = state.playerUnits.map((u) => {
+        if (u.status === "destroyed") return u;
+        if (!u.actedThisTurn) {
+          allLogs.push(makeLog("player", `${u.name} 待機（自動）`, state.turn));
+          return { ...u, actedThisTurn: true };
+        }
+        return u;
+      });
+
+      allLogs.push(makeLog("system", "--- 敵フェーズ ---", state.turn));
+
+      return {
+        ...state,
+        playerUnits: updatedUnits,
+        turnPhase: "enemy" as const,
+        log: [...state.log, ...allLogs],
+      };
+    }
+
+    // ===== PROCESS_ENEMY_PHASE =====
+    case "PROCESS_ENEMY_PHASE": {
+      if (state.phase !== "playing" || state.turnPhase !== "enemy") return state;
+
+      const { units: updatedEnemies, playerUnits: updatedPlayers, log: enemyLog } =
+        processEnemyTurn(state);
+
+      const allLogs: GameLogEntry[] = enemyLog.map((msg) =>
+        makeLog("combat", msg, state.turn),
+      );
+
+      if (enemyLog.length > 0) {
+        allLogs.push(makeLog("intel", pickIntelMessage("combat_result", state.wave), state.turn));
+      }
+
+      allLogs.push(makeLog("system", "--- 解決フェーズ ---", state.turn));
+
+      return {
+        ...state,
+        enemyUnits: updatedEnemies,
+        playerUnits: updatedPlayers,
+        turnPhase: "resolution" as const,
+        log: [...state.log, ...allLogs],
+      };
+    }
+
+    // ===== PROCESS_RESOLUTION =====
+    case "PROCESS_RESOLUTION": {
+      if (state.phase !== "playing" || state.turnPhase !== "resolution") return state;
+
+      const allLogs: GameLogEntry[] = [];
+      let s: GameState = { ...state };
 
       // 1. Spawn wave events
       const { events: eventsAfterSpawn, log: spawnLog } = spawnEvents(s);
       s = { ...s, events: eventsAfterSpawn };
       allLogs.push(...spawnLog);
 
-      // 2. Enemy AI
-      const { enemyUnits, log: enemyLog } = processEnemyUnits(s);
-      s = { ...s, enemyUnits };
-      allLogs.push(...enemyLog);
+      // 2. Spawn new enemy units if wave turn matches
+      const { enemyUnits: enemiesAfterSpawn, log: enemySpawnLog } = spawnEnemyUnits(s);
+      s = { ...s, enemyUnits: enemiesAfterSpawn };
+      allLogs.push(...enemySpawnLog);
 
-      // 3. Progress missions
-      const { missions, playerUnits: unitsAfterMissions, log: missionLog } =
-        progressMissions(s);
-      s = { ...s, missions, playerUnits: unitsAfterMissions };
-      allLogs.push(...missionLog);
-
-      // 4. Resolve combat
-      const { updatedPlayer, updatedEnemy, combatLog } = resolveEngagements(s);
-      s = { ...s, playerUnits: updatedPlayer, enemyUnits: updatedEnemy };
-      for (const msg of combatLog) {
-        allLogs.push(makeLog("combat", msg, nextTurn));
-      }
-      if (combatLog.length > 0) {
-        allLogs.push(makeLog("intel", pickIntelMessage("combat_result", s.wave), nextTurn));
-      }
-
-      // 5. Resolve events
+      // 3. Resolve events (check if linked enemies are destroyed)
       const resolvedEvents = resolveEvents(s);
       s = { ...s, events: resolvedEvents };
 
-      // 6. KPI drain
+      // 4. KPI drain from unresolved events
       const kpis = applyKpiDrain(s);
       s = { ...s, kpis };
 
+      // 5. Supply logistics: -3 per turn cost, +5 per surviving facility
+      const survivingFacilities = s.playerUnits.filter(
+        (u) => u.id.startsWith("base-") && u.status !== "destroyed",
+      ).length;
+      const supplyDelta = survivingFacilities * 5 - 3;
+      const newSupply = Math.max(0, s.supply + supplyDelta);
+      s = { ...s, supply: newSupply };
+      allLogs.push(
+        makeLog("system", `補給: ${supplyDelta >= 0 ? "+" : ""}${supplyDelta} (施設×${survivingFacilities}) → 残 ${newSupply}`, s.turn),
+      );
+
       // KPI warning
-      for (const [key, val] of Object.entries(kpis)) {
-        if (val <= 30 && val > 0) {
-          allLogs.push(makeLog("intel", pickIntelMessage("kpi_warning", s.wave), nextTurn));
+      for (const [, val] of Object.entries(kpis)) {
+        if ((val as number) <= 30 && (val as number) > 0) {
+          allLogs.push(makeLog("intel", pickIntelMessage("kpi_warning", s.wave), s.turn));
           break;
         }
       }
 
-      // 7. Win/lose check
+      // 6. Win/lose check
       const endResult = checkEndConditions(s);
       if (endResult) {
         const msg = pickIntelMessage(endResult === "victory" ? "victory" : "defeat", s.wave);
-        allLogs.push(makeLog("system", msg, nextTurn));
+        allLogs.push(makeLog("system", msg, s.turn));
         return {
           ...s,
           phase: endResult,
@@ -395,15 +558,19 @@ function gameReducer(state: GameState, action: GameAction): GameState {
         };
       }
 
-      // 8. Auto-advance wave
+      // 7. Auto-advance wave
       if (shouldAdvanceWave(s)) {
+        const clearedWaveConfig = getWaveConfig(s.wave);
+        const bonus = clearedWaveConfig.supplyBonus ?? 30;
         const nextWave = s.wave + 1;
-        const waveConfig = getWaveConfig(nextWave);
+        const nextWaveConfig = getWaveConfig(nextWave);
+        const clearSupply = s.supply + bonus;
         allLogs.push(
-          makeLog("system", `=== 第${nextWave}波: ${waveConfig.name} ===`, nextTurn),
-          makeLog("intel", waveConfig.briefing, nextTurn),
+          makeLog("system", `フェーズクリアボーナス: 補給 +${bonus} → ${clearSupply}`, s.turn),
+          makeLog("system", `=== 第${nextWave}波: ${nextWaveConfig.name} ===`, s.turn),
+          makeLog("intel", nextWaveConfig.briefing, s.turn),
         );
-        s = { ...s, wave: nextWave };
+        s = { ...s, wave: nextWave, supply: clearSupply };
       }
 
       // Periodic intel messages
@@ -411,113 +578,31 @@ function gameReducer(state: GameState, action: GameAction): GameState {
       const turnInWave = s.turn - turnStartForWave(s.wave);
       if (waveConfig.intel.length > 0 && turnInWave > 0) {
         const intelIdx = turnInWave % waveConfig.intel.length;
-        allLogs.push(makeLog("intel", waveConfig.intel[intelIdx], nextTurn));
+        allLogs.push(makeLog("intel", waveConfig.intel[intelIdx], s.turn));
       }
 
-      return { ...s, log: [...s.log, ...allLogs] };
-    }
+      // 8. Reset all units' actedThisTurn, increment turn, set phase to player
+      const nextTurn = s.turn + 1;
+      const resetPlayerUnits = s.playerUnits.map((u) => ({
+        ...u,
+        actedThisTurn: false,
+        // Reset engaging/moving status to idle for living units
+        status: (u.status === "destroyed" ? "destroyed" : u.status === "damaged" ? "damaged" : "idle") as GameUnit["status"],
+      }));
+      const resetEnemyUnits = s.enemyUnits.map((u) => ({
+        ...u,
+        actedThisTurn: false,
+      }));
 
-    // ===== DISPATCH_UNIT =====
-    case "DISPATCH_UNIT": {
-      const { unitId, eventId } = action;
-      const unit = state.playerUnits.find((u) => u.id === unitId);
-      const event = state.events.find((e) => e.id === eventId);
-      if (!unit || !event) return state;
-      if (unit.status === "destroyed") return state;
-
-      // Update the unit
-      const updatedUnits = state.playerUnits.map((u) =>
-        u.id === unitId
-          ? { ...u, status: "moving" as const, targetId: eventId }
-          : u,
-      );
-
-      // Find or create mission for this event
-      let missions = [...state.missions];
-      const existing = missions.find((m) => m.eventId === eventId);
-
-      if (existing) {
-        missions = missions.map((m) =>
-          m.id === existing.id
-            ? {
-                ...m,
-                assignedUnitIds: [...m.assignedUnitIds, unitId],
-                stage: "dispatched" as const,
-              }
-            : m,
-        );
-      } else {
-        const newMission: Mission = {
-          id: `mission-${uid().slice(0, 8)}`,
-          title: event.title,
-          stage: "dispatched",
-          severity: event.severity,
-          assignedUnitIds: [unitId],
-          eventId: event.id,
-          eta: "進行中",
-        };
-        missions = [...missions, newMission];
-      }
-
-      // Link the enemy units near the event to the event
-      const LINK_RANGE = 0.5;
-      const nearbyEnemies = state.enemyUnits.filter(
-        (e) =>
-          e.status !== "destroyed" &&
-          distance(e, event) < LINK_RANGE &&
-          !event.linkedUnitIds.includes(e.id),
-      );
-      const updatedEvents = state.events.map((e) =>
-        e.id === eventId
-          ? {
-              ...e,
-              linkedUnitIds: [
-                ...e.linkedUnitIds,
-                ...nearbyEnemies.map((u) => u.id),
-              ],
-            }
-          : e,
-      );
-
-      // Also set enemy targetId so player units know who to fight
-      const updatedEnemies = state.enemyUnits.map((e) => {
-        if (nearbyEnemies.some((ne) => ne.id === e.id)) {
-          return { ...e, targetId: unitId };
-        }
-        return e;
-      });
+      allLogs.push(makeLog("system", `--- ターン ${nextTurn}: プレイヤーフェーズ ---`, nextTurn));
 
       return {
-        ...state,
-        playerUnits: updatedUnits,
-        enemyUnits: updatedEnemies,
-        missions,
-        events: updatedEvents,
-        log: [
-          ...state.log,
-          makeLog(
-            "player",
-            `${unit.name} を「${event.title}」に派遣`,
-            state.turn,
-          ),
-        ],
-      };
-    }
-
-    // ===== APPROVE_MISSION =====
-    case "APPROVE_MISSION": {
-      const { missionId } = action;
-      return {
-        ...state,
-        missions: state.missions.map((m) =>
-          m.id === missionId && m.stage === "detected"
-            ? { ...m, stage: "dispatched" as const }
-            : m,
-        ),
-        log: [
-          ...state.log,
-          makeLog("player", `ミッション承認: ${missionId}`, state.turn),
-        ],
+        ...s,
+        turn: nextTurn,
+        turnPhase: "player" as const,
+        playerUnits: resetPlayerUnits,
+        enemyUnits: resetEnemyUnits,
+        log: [...s.log, ...allLogs],
       };
     }
 
@@ -538,7 +623,7 @@ function gameReducer(state: GameState, action: GameAction): GameState {
 
       const updatedUnits = state.playerUnits.map((u) =>
         u.id === unitId
-          ? { ...u, status: "moving" as const, targetId: targetUnitId }
+          ? { ...u, targetId: targetUnitId }
           : u,
       );
 

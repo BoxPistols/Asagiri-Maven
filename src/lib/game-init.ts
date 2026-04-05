@@ -25,6 +25,7 @@ const playerFacilities: GameUnit[] = [
     speed: 0,
     status: "idle",
     detail: "首都中枢指揮施設 — 全方面統制",
+    actedThisTurn: false,
   },
   {
     id: "base-osaka",
@@ -40,6 +41,7 @@ const playerFacilities: GameUnit[] = [
     speed: 0,
     status: "idle",
     detail: "関西方面防衛統制所",
+    actedThisTurn: false,
   },
   {
     id: "base-nagoya",
@@ -55,6 +57,7 @@ const playerFacilities: GameUnit[] = [
     speed: 0,
     status: "idle",
     detail: "中部前線作戦拠点",
+    actedThisTurn: false,
   },
   {
     id: "base-fukuoka",
@@ -70,6 +73,7 @@ const playerFacilities: GameUnit[] = [
     speed: 0,
     status: "idle",
     detail: "西方哨戒・早期警戒拠点",
+    actedThisTurn: false,
   },
   {
     id: "base-sapporo",
@@ -85,6 +89,7 @@ const playerFacilities: GameUnit[] = [
     speed: 0,
     status: "idle",
     detail: "北方補給・兵站支援拠点",
+    actedThisTurn: false,
   },
 ];
 
@@ -103,6 +108,7 @@ const playerMobileUnits: GameUnit[] = [
     speed: 0.3,
     status: "idle",
     detail: "東京近郊待機 — 即応",
+    actedThisTurn: false,
   },
   {
     id: "unit-cv-2",
@@ -118,6 +124,7 @@ const playerMobileUnits: GameUnit[] = [
     speed: 0.3,
     status: "idle",
     detail: "大阪近郊待機 — 即応",
+    actedThisTurn: false,
   },
   {
     id: "unit-cv-3",
@@ -133,6 +140,7 @@ const playerMobileUnits: GameUnit[] = [
     speed: 0.3,
     status: "idle",
     detail: "名古屋近郊待機 — 即応",
+    actedThisTurn: false,
   },
   {
     id: "unit-dr-1",
@@ -148,6 +156,7 @@ const playerMobileUnits: GameUnit[] = [
     speed: 0.6,
     status: "idle",
     detail: "東京湾岸哨戒任務",
+    actedThisTurn: false,
   },
   {
     id: "unit-dr-2",
@@ -163,6 +172,7 @@ const playerMobileUnits: GameUnit[] = [
     speed: 0.6,
     status: "idle",
     detail: "大阪湾哨戒任務",
+    actedThisTurn: false,
   },
   {
     id: "unit-dr-3",
@@ -178,6 +188,7 @@ const playerMobileUnits: GameUnit[] = [
     speed: 0.6,
     status: "idle",
     detail: "伊勢湾哨戒任務",
+    actedThisTurn: false,
   },
   {
     id: "unit-dr-4",
@@ -193,6 +204,7 @@ const playerMobileUnits: GameUnit[] = [
     speed: 0.6,
     status: "idle",
     detail: "博多湾哨戒任務",
+    actedThisTurn: false,
   },
   {
     id: "unit-sh-1",
@@ -208,6 +220,7 @@ const playerMobileUnits: GameUnit[] = [
     speed: 0.2,
     status: "idle",
     detail: "東京湾防衛配置",
+    actedThisTurn: false,
   },
   {
     id: "unit-sh-2",
@@ -223,6 +236,7 @@ const playerMobileUnits: GameUnit[] = [
     speed: 0.2,
     status: "idle",
     detail: "福岡沖防衛配置",
+    actedThisTurn: false,
   },
 ];
 
@@ -236,6 +250,8 @@ export function createInitialGameState(): GameState {
     wave: 1,
     turn: 0,
     maxTurns: WAVE_CONFIGS.reduce((sum, w) => sum + w.turns, 0),
+    turnPhase: "player" as const,
+    supply: 200,
     kpis: {
       combat: 100,
       supply: 100,

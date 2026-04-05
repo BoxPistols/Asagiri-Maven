@@ -1,11 +1,12 @@
 "use client";
 
-import { Target, Crosshair, Shield, Swords, Zap, X, Heart, Gauge } from "lucide-react";
+import { Crosshair, Shield, Swords, Zap, X, Heart, Gauge, Wrench, CheckCircle } from "lucide-react";
 import type { GameUnit } from "@/lib/game-types";
+import { getAttackRange, getTypeAdvantage } from "@/lib/combat-rules";
 
 // ---------- helpers ----------
 
-function unitTypeIcon(type: GameUnit["type"]) {
+function unitTypeLabel(type: GameUnit["type"]) {
   switch (type) {
     case "infantry":  return "歩兵";
     case "vehicle":   return "車両";
@@ -48,20 +49,38 @@ function threatLevel(unit: GameUnit): { label: string; color: string } {
   return { label: "低", color: "var(--accent-cyan)" };
 }
 
+/** Build type advantage hints for a player unit */
+function typeAdvantageHints(type: GameUnit["type"]): { strong: string[]; weak: string[] } {
+  const allTypes: GameUnit["type"][] = ["infantry", "vehicle", "drone", "ship", "cyber"];
+  const typeLabels: Record<GameUnit["type"], string> = {
+    infantry: "歩兵", vehicle: "車両", drone: "ドローン", ship: "艦船", cyber: "サイバー",
+  };
+  const strong: string[] = [];
+  const weak: string[] = [];
+  for (const t of allTypes) {
+    if (t === type) continue;
+    const adv = getTypeAdvantage(type, t);
+    if (adv >= 1.5) strong.push(typeLabels[t]);
+    else if (adv <= 0.6) weak.push(typeLabels[t]);
+  }
+  return { strong, weak };
+}
+
 // ---------- component ----------
 
 export interface UnitDetailPanelProps {
   unit: GameUnit | null;
-  onAssignTarget: (unitId: string) => void;
   onClose: () => void;
+  /** Whether the unit is near a friendly facility and can be repaired */
+  canRepair?: boolean;
   /** Optional: the name of the current engagement target */
   targetName?: string;
 }
 
 export default function UnitDetailPanel({
   unit,
-  onAssignTarget,
   onClose,
+  canRepair = false,
   targetName,
 }: UnitDetailPanelProps) {
   if (!unit) return null;
@@ -69,9 +88,10 @@ export default function UnitDetailPanel({
   const hpRatio = unit.maxHp > 0 ? unit.hp / unit.maxHp : 0;
   const sColor = statusColor(unit.status);
   const isPlayer = unit.faction === "player";
-  const isIdle = unit.status === "idle";
   const isEngaging = unit.status === "engaging";
   const threat = !isPlayer ? threatLevel(unit) : null;
+  const attackRange = getAttackRange(unit.type);
+  const hints = isPlayer ? typeAdvantageHints(unit.type) : null;
 
   return (
     <div
@@ -94,7 +114,7 @@ export default function UnitDetailPanel({
       </div>
 
       <div className="px-3 py-2.5 space-y-2.5">
-        {/* Type + Faction badges */}
+        {/* Type + Faction + Status + Action badges */}
         <div className="flex items-center gap-2 flex-wrap">
           <span
             className="readout text-xs px-1.5 py-0.5 rounded"
@@ -104,7 +124,7 @@ export default function UnitDetailPanel({
               border: "1px solid var(--border-active)",
             }}
           >
-            {unitTypeIcon(unit.type)}
+            {unitTypeLabel(unit.type)}
           </span>
           <span
             className="readout text-xs px-1.5 py-0.5 rounded font-bold"
@@ -130,6 +150,35 @@ export default function UnitDetailPanel({
           </span>
         </div>
 
+        {/* Action status badge */}
+        {isPlayer && unit.speed > 0 && (
+          <div className={`flex items-center gap-1.5 readout text-xs px-2 py-1.5 rounded ${
+            unit.actedThisTurn
+              ? "bg-alert-success/8 border border-alert-success/20 text-alert-success"
+              : "bg-accent-cyan/8 border border-accent-cyan/20 text-accent-cyan"
+          }`}>
+            {unit.actedThisTurn ? (
+              <>
+                <CheckCircle className="w-3.5 h-3.5" />
+                行動済み
+              </>
+            ) : (
+              <>
+                <Zap className="w-3.5 h-3.5" />
+                行動可能
+              </>
+            )}
+          </div>
+        )}
+
+        {/* Repair badge */}
+        {isPlayer && canRepair && (
+          <div className="flex items-center gap-1.5 readout text-xs px-2 py-1.5 rounded bg-alert-warning/8 border border-alert-warning/20 text-alert-warning">
+            <Wrench className="w-3.5 h-3.5" />
+            修理可能
+          </div>
+        )}
+
         {/* HP bar */}
         <div>
           <div className="flex items-center justify-between mb-1">
@@ -152,41 +201,56 @@ export default function UnitDetailPanel({
         </div>
 
         {/* Stats */}
-        <div className="grid grid-cols-3 gap-1.5">
+        <div className="grid grid-cols-4 gap-1">
           <div className="flex flex-col items-center py-1.5 rounded bg-bg-elevated/60">
             <Swords className="w-3 h-3 text-alert-critical mb-0.5" />
-            <span className="readout text-xs text-text-dim">攻撃力</span>
-            <span className="readout text-sm text-text-primary font-bold">
+            <span className="readout text-[10px] text-text-dim">攻撃</span>
+            <span className="readout text-xs text-text-primary font-bold">
               {unit.attack}
             </span>
           </div>
           <div className="flex flex-col items-center py-1.5 rounded bg-bg-elevated/60">
             <Shield className="w-3 h-3 text-accent-blue mb-0.5" />
-            <span className="readout text-xs text-text-dim">防御力</span>
-            <span className="readout text-sm text-text-primary font-bold">
+            <span className="readout text-[10px] text-text-dim">防御</span>
+            <span className="readout text-xs text-text-primary font-bold">
               {unit.defense}
             </span>
           </div>
           <div className="flex flex-col items-center py-1.5 rounded bg-bg-elevated/60">
             <Gauge className="w-3 h-3 text-alert-success mb-0.5" />
-            <span className="readout text-xs text-text-dim">速度</span>
-            <span className="readout text-sm text-text-primary font-bold">
+            <span className="readout text-[10px] text-text-dim">速度</span>
+            <span className="readout text-xs text-text-primary font-bold">
               {unit.speed}
+            </span>
+          </div>
+          <div className="flex flex-col items-center py-1.5 rounded bg-bg-elevated/60">
+            <Crosshair className="w-3 h-3 text-alert-warning mb-0.5" />
+            <span className="readout text-[10px] text-text-dim">射程</span>
+            <span className="readout text-xs text-text-primary font-bold">
+              {attackRange.toFixed(1)}
             </span>
           </div>
         </div>
 
-        {/* Contextual section */}
-        {isPlayer && isIdle && (
-          <button
-            className="btn-tactical w-full justify-center !border-accent-indigo/40 !text-accent-indigo hover:!bg-accent-indigo/10"
-            onClick={() => onAssignTarget(unit.id)}
-          >
-            <Target className="w-3.5 h-3.5" />
-            目標指定
-          </button>
+        {/* Type advantage hints (player units only) */}
+        {isPlayer && hints && (hints.strong.length > 0 || hints.weak.length > 0) && (
+          <div className="space-y-1">
+            {hints.strong.length > 0 && (
+              <div className="readout text-xs text-alert-success flex items-center gap-1">
+                <span className="shrink-0">有利:</span>
+                <span className="text-text-secondary">対{hints.strong.join("・")}</span>
+              </div>
+            )}
+            {hints.weak.length > 0 && (
+              <div className="readout text-xs text-alert-critical flex items-center gap-1">
+                <span className="shrink-0">不利:</span>
+                <span className="text-text-secondary">対{hints.weak.join("・")}</span>
+              </div>
+            )}
+          </div>
         )}
 
+        {/* Contextual section */}
         {isPlayer && isEngaging && targetName && (
           <div className="flex items-center gap-2 text-xs readout px-2 py-1.5 rounded bg-alert-warning/8 border border-alert-warning/20 text-alert-warning">
             <Crosshair className="w-3.5 h-3.5 shrink-0" />
@@ -196,7 +260,7 @@ export default function UnitDetailPanel({
 
         {isPlayer && unit.status === "moving" && targetName && (
           <div className="flex items-center gap-2 text-xs readout px-2 py-1.5 rounded bg-accent-blue/8 border border-accent-blue/20 text-accent-blue">
-            <Target className="w-3.5 h-3.5 shrink-0" />
+            <Crosshair className="w-3.5 h-3.5 shrink-0" />
             <span className="truncate">目標: {targetName}</span>
           </div>
         )}

@@ -1,9 +1,10 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { MAP_MARKERS, VEHICLE_ROUTES, type MapMarker, type SeverityLevel } from "@/lib/mock-data";
 import { Layers, Crosshair, Clock, Warehouse, Truck, AlertTriangle, User, Navigation, Swords } from "lucide-react";
-import type { GameUnit } from "@/lib/game-types";
+import type { GameUnit, TurnPhase } from "@/lib/game-types";
+import { getAttackRange } from "@/lib/combat-rules";
 import { useTheme } from "@/hooks/useTheme";
 import dynamic from "next/dynamic";
 
@@ -32,6 +33,14 @@ const CircleMarker = dynamic(
   () => import("react-leaflet").then(m => m.CircleMarker),
   { ssr: false }
 );
+const Circle = dynamic(
+  () => import("react-leaflet").then(m => m.Circle),
+  { ssr: false }
+);
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
 
 function statusColor(s: SeverityLevel): string {
   switch (s) {
@@ -42,64 +51,27 @@ function statusColor(s: SeverityLevel): string {
   }
 }
 
-function typeIcon(type: MapMarker["type"]) {
-  switch (type) {
-    case "facility": return Warehouse;
-    case "vehicle": return Truck;
-    case "alert": return AlertTriangle;
-    case "personnel": return User;
-    case "drone": return Navigation;
-  }
+/** Convert "map degrees" to approximate meters for Leaflet Circle radius.
+ *  At ~36N latitude, 1 degree lat ~ 111km, 1 degree lng ~ 90km.
+ *  We use the average (~100km) for a rough circle. */
+function degreesToMeters(degrees: number): number {
+  return degrees * 100_000;
 }
 
-function MarkerIcon({ marker }: { marker: MapMarker }) {
-  const color = statusColor(marker.status);
-  const Icon = typeIcon(marker.type);
-  const isAlert = marker.status === "critical" || marker.status === "warning";
-
-  return (
-    <div className="relative flex items-center justify-center">
-      {isAlert && (
-        <span
-          className="absolute w-8 h-8 rounded-full animate-pulse-ring"
-          style={{ backgroundColor: color, opacity: 0.25 }}
-        />
-      )}
-      <span
-        className="relative flex items-center justify-center w-6 h-6 rounded-full border-2"
-        style={{ backgroundColor: `${color}20`, borderColor: color }}
-      >
-        <Icon className="w-3 h-3" style={{ color }} />
-      </span>
-    </div>
-  );
+/** Flat-Earth distance in degrees (same as combat-rules) */
+function distanceDeg(
+  a: { lat: number; lng: number },
+  b: { lat: number; lng: number },
+): number {
+  const dlat = a.lat - b.lat;
+  const dlng = (a.lng - b.lng) * Math.cos(((a.lat + b.lat) / 2) * (Math.PI / 180));
+  return Math.sqrt(dlat * dlat + dlng * dlng);
 }
 
-function MarkerPopupContent({ marker }: { marker: MapMarker }) {
-  const color = statusColor(marker.status);
-  return (
-    <div className="min-w-[200px] p-0 text-text-primary" style={{ fontFamily: "var(--font-display)" }}>
-      <div className="flex items-center gap-2 mb-2">
-        <span
-          className="readout text-xs uppercase px-1.5 py-0.5 rounded font-bold"
-          style={{ color, backgroundColor: `${color}15`, border: `1px solid ${color}40` }}
-        >
-          {marker.type === "facility" ? "施設" : marker.type === "vehicle" ? "車両" : marker.type === "alert" ? "検知" : marker.type === "drone" ? "ドローン" : "人員"}
-        </span>
-        <span
-          className="readout text-xs uppercase px-1.5 py-0.5 rounded"
-          style={{ color, backgroundColor: `${color}10` }}
-        >
-          {marker.status}
-        </span>
-      </div>
-      <div className="text-sm font-semibold mb-1" style={{ color: "var(--text-primary)" }}>{marker.label}</div>
-      <div className="text-xs" style={{ color: "var(--text-secondary)" }}>{marker.detail}</div>
-      <div className="text-xs mt-1.5 pt-1.5 readout" style={{ color: "var(--text-dim)", borderTop: "1px solid var(--border-subtle)" }}>
-        {marker.lat.toFixed(4)}, {marker.lng.toFixed(4)}
-      </div>
-    </div>
-  );
+function hpColor(ratio: number): string {
+  if (ratio > 0.6) return "#34d399";
+  if (ratio > 0.3) return "#fbbf24";
+  return "#f87171";
 }
 
 // Layer toggle types
@@ -115,6 +87,33 @@ const LAYER_CONFIG: { key: LayerType; label: string; icon: typeof Warehouse }[] 
 const TILE_DARK = "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png";
 const TILE_LIGHT = "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png";
 
+// ---------------------------------------------------------------------------
+// Map event handler component (listens for click/mousemove on map)
+// ---------------------------------------------------------------------------
+
+function MapEventHandler({ onMapClick, onMouseMove }: {
+  onMapClick?: (lat: number, lng: number) => void;
+  onMouseMove?: (lat: number, lng: number) => void;
+}) {
+  const [loaded, setLoaded] = useState(false);
+
+  useEffect(() => {
+    setLoaded(true);
+  }, []);
+
+  useEffect(() => {
+    if (!loaded) return;
+    // We use useMapEvents from react-leaflet inside a dynamic component
+    // This is handled by the parent MapContainer click events instead
+  }, [loaded]);
+
+  return null;
+}
+
+// ---------------------------------------------------------------------------
+// Props
+// ---------------------------------------------------------------------------
+
 interface TacticalMapProps {
   onSelectMarker?: (id: string | null) => void;
   onMarkerClick?: (id: string) => void;
@@ -123,10 +122,29 @@ interface TacticalMapProps {
   playerUnits?: GameUnit[];
   selectedUnitId?: string | null;
   targetingMode?: boolean;
+  turnPhase?: TurnPhase;
+  onMapClick?: (lat: number, lng: number) => void;
+  actedUnitIds?: string[];
   children?: React.ReactNode;
 }
 
-export default function TacticalMap({ onSelectMarker, onMarkerClick, markers, enemyUnits, playerUnits, selectedUnitId, targetingMode, children }: TacticalMapProps) {
+// ---------------------------------------------------------------------------
+// Component
+// ---------------------------------------------------------------------------
+
+export default function TacticalMap({
+  onSelectMarker,
+  onMarkerClick,
+  markers,
+  enemyUnits,
+  playerUnits,
+  selectedUnitId,
+  targetingMode,
+  turnPhase,
+  onMapClick,
+  actedUnitIds = [],
+  children,
+}: TacticalMapProps) {
   const { theme } = useTheme();
   const [mounted, setMounted] = useState(false);
   const [timeValue, setTimeValue] = useState(100);
@@ -134,8 +152,22 @@ export default function TacticalMap({ onSelectMarker, onMarkerClick, markers, en
     facility: true, vehicle: true, drone: true, alert: true, personnel: true,
   });
   const [showLayerPanel, setShowLayerPanel] = useState(false);
+  const [mousePos, setMousePos] = useState<{ lat: number; lng: number } | null>(null);
+  const [moveTarget, setMoveTarget] = useState<{ lat: number; lng: number } | null>(null);
+  const moveTargetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => { setMounted(true); }, []);
+
+  // Clear move target after 1.5s
+  useEffect(() => {
+    if (moveTarget) {
+      if (moveTargetTimerRef.current) clearTimeout(moveTargetTimerRef.current);
+      moveTargetTimerRef.current = setTimeout(() => setMoveTarget(null), 1500);
+    }
+    return () => {
+      if (moveTargetTimerRef.current) clearTimeout(moveTargetTimerRef.current);
+    };
+  }, [moveTarget]);
 
   const baseMarkers = markers ?? MAP_MARKERS;
 
@@ -143,6 +175,14 @@ export default function TacticalMap({ onSelectMarker, onMarkerClick, markers, en
     () => baseMarkers.filter(m => layers[m.type]),
     [baseMarkers, layers]
   );
+
+  // Find the currently selected player unit
+  const selectedPlayerUnit = useMemo(() => {
+    if (!selectedUnitId || !playerUnits) return null;
+    return playerUnits.find(u => u.id === selectedUnitId && u.faction === "player") ?? null;
+  }, [selectedUnitId, playerUnits]);
+
+  const actedSet = useMemo(() => new Set(actedUnitIds), [actedUnitIds]);
 
   // Build engagement lines: player unit engaging enemy unit
   const engagementLines = useMemo(() => {
@@ -163,13 +203,102 @@ export default function TacticalMap({ onSelectMarker, onMarkerClick, markers, en
     return lines;
   }, [playerUnits, enemyUnits]);
 
-  // Create divIcon for enemy units
-  const createEnemyIcon = (unit: GameUnit) => {
+  // Range visualisation data
+  const rangeData = useMemo(() => {
+    if (!selectedPlayerUnit) return null;
+    if (selectedPlayerUnit.status === "destroyed") return null;
+    if (actedSet.has(selectedPlayerUnit.id)) return null;
+    if (turnPhase !== "player") return null;
+
+    const moveRange = selectedPlayerUnit.speed;
+    const attackRange = getAttackRange(selectedPlayerUnit.type);
+    return {
+      center: [selectedPlayerUnit.lat, selectedPlayerUnit.lng] as [number, number],
+      moveRadiusM: degreesToMeters(moveRange),
+      attackRadiusM: degreesToMeters(attackRange),
+      moveRangeDeg: moveRange,
+    };
+  }, [selectedPlayerUnit, actedSet, turnPhase]);
+
+  // Movement path preview data
+  const pathPreview = useMemo(() => {
+    if (!rangeData || !mousePos || !selectedPlayerUnit) return null;
+    const dist = distanceDeg(selectedPlayerUnit, mousePos);
+    const inRange = dist <= rangeData.moveRangeDeg;
+    return {
+      from: rangeData.center,
+      to: [mousePos.lat, mousePos.lng] as [number, number],
+      color: inRange ? "#34d399" : "#f87171",
+    };
+  }, [rangeData, mousePos, selectedPlayerUnit]);
+
+  // Create divIcon for player unit markers with HP bar
+  const createPlayerIcon = useCallback((unit: GameUnit) => {
+    if (typeof window === "undefined") return undefined;
+    const L = require("leaflet");
+    const isSelected = unit.id === selectedUnitId;
+    const acted = actedSet.has(unit.id);
+    const hpRatio = unit.maxHp > 0 ? unit.hp / unit.maxHp : 0;
+    const hpPercent = Math.max(0, Math.round(hpRatio * 100));
+    const hpCol = hpColor(hpRatio);
+    const opacity = acted ? "opacity:0.5;" : "";
+
+    const typeChar = unit.type === "vehicle" ? "V"
+      : unit.type === "drone" ? "D"
+      : unit.type === "ship" ? "S"
+      : unit.type === "infantry" ? "I"
+      : unit.type === "cyber" ? "C"
+      : "?";
+
+    // Determine marker color based on whether it's a facility or mobile
+    const isFacility = unit.id.startsWith("base-");
+    const color = isFacility ? "#34d399" : "#22d3ee";
+
+    const selectedRing = isSelected
+      ? `<span style="position:absolute;width:38px;height:38px;border-radius:50%;border:2px solid #818cf8;opacity:0.9;animation:glow-pulse 2s ease-in-out infinite;"></span>`
+      : "";
+
+    const actedCheck = acted
+      ? `<span style="position:absolute;top:-4px;right:-4px;width:12px;height:12px;border-radius:50%;background:#34d399;display:flex;align-items:center;justify-content:center;font-size:8px;color:#fff;line-height:1;">&#10003;</span>`
+      : "";
+
+    return L.divIcon({
+      className: "custom-marker",
+      html: `
+        <div style="position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;${opacity}">
+          ${selectedRing}
+          ${actedCheck}
+          <span style="position:relative;display:flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:50%;background:${color}20;border:2px solid ${color};font-family:var(--font-mono);font-size:11px;font-weight:bold;color:${color};">
+            ${typeChar}
+          </span>
+          <div style="width:24px;height:3px;background:#333;margin-top:2px;border-radius:1px;overflow:hidden;">
+            <div style="width:${hpPercent}%;height:100%;background:${hpCol};border-radius:1px;"></div>
+          </div>
+        </div>
+      `,
+      iconSize: [38, 42],
+      iconAnchor: [19, 21],
+      popupAnchor: [0, -21],
+    });
+  }, [selectedUnitId, actedSet]);
+
+  // Create divIcon for enemy units with HP bar
+  const createEnemyIcon = useCallback((unit: GameUnit) => {
     if (typeof window === "undefined") return undefined;
     const L = require("leaflet");
     const isEngaging = unit.status === "engaging";
     const isDamaged = unit.status === "damaged";
-    const typeChar = "E";
+    const hpRatio = unit.maxHp > 0 ? unit.hp / unit.maxHp : 0;
+    const hpPercent = Math.max(0, Math.round(hpRatio * 100));
+    const hpCol = hpColor(hpRatio);
+
+    const typeChar = unit.type === "vehicle" ? "V"
+      : unit.type === "drone" ? "D"
+      : unit.type === "ship" ? "S"
+      : unit.type === "infantry" ? "I"
+      : unit.type === "cyber" ? "C"
+      : "E";
+
     const color = "#f87171";
     const pulseClass = isEngaging || isDamaged ? "enemy-pulse-anim" : "";
     const targetGlow = targetingMode
@@ -180,26 +309,25 @@ export default function TacticalMap({ onSelectMarker, onMarkerClick, markers, en
     return L.divIcon({
       className: "custom-marker",
       html: `
-        <div style="position:relative;display:flex;align-items:center;justify-content:center;${targetCursor}" class="${pulseClass}">
+        <div style="position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;${targetCursor}" class="${pulseClass}">
           <span style="position:absolute;width:36px;height:36px;border-radius:50%;background:${color};opacity:0.15;animation:enemy-pulse 1.8s ease-out infinite;"></span>
           ${targetingMode ? `<span style="position:absolute;width:42px;height:42px;border-radius:50%;border:2px dashed ${color};opacity:0.7;${targetGlow}"></span>` : ""}
           <span style="position:relative;display:flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:50%;background:rgba(248,113,113,0.2);border:2px solid ${color};font-family:var(--font-mono);font-size:11px;font-weight:bold;color:${color};">
             ${typeChar}
           </span>
+          <div style="width:24px;height:3px;background:#333;margin-top:2px;border-radius:1px;overflow:hidden;">
+            <div style="width:${hpPercent}%;height:100%;background:${hpCol};border-radius:1px;"></div>
+          </div>
         </div>
       `,
-      iconSize: [42, 42],
-      iconAnchor: [21, 21],
-      popupAnchor: [0, -21],
+      iconSize: [42, 46],
+      iconAnchor: [21, 23],
+      popupAnchor: [0, -23],
     });
-  };
+  }, [targetingMode]);
 
-  const toggleLayer = (key: LayerType) => {
-    setLayers(prev => ({ ...prev, [key]: !prev[key] }));
-  };
-
-  // Create custom divIcon for each marker (leaflet needs this)
-  const createIcon = (marker: MapMarker) => {
+  // Create custom divIcon for facility/map markers
+  const createIcon = useCallback((marker: MapMarker) => {
     if (typeof window === "undefined") return undefined;
     const L = require("leaflet");
     const color = statusColor(marker.status);
@@ -225,7 +353,51 @@ export default function TacticalMap({ onSelectMarker, onMarkerClick, markers, en
       iconAnchor: [19, 19],
       popupAnchor: [0, -19],
     });
-  };
+  }, [selectedUnitId]);
+
+  // Move target icon
+  const createMoveTargetIcon = useCallback(() => {
+    if (typeof window === "undefined") return undefined;
+    const L = require("leaflet");
+    return L.divIcon({
+      className: "custom-marker",
+      html: `
+        <div style="position:relative;display:flex;align-items:center;justify-content:center;">
+          <span style="position:absolute;width:20px;height:20px;border-radius:50%;border:2px dashed #34d399;opacity:0.8;animation:pulse-ring 1s ease-out infinite;"></span>
+          <span style="width:6px;height:6px;border-radius:50%;background:#34d399;"></span>
+        </div>
+      `,
+      iconSize: [20, 20],
+      iconAnchor: [10, 10],
+    });
+  }, []);
+
+  const toggleLayer = useCallback((key: LayerType) => {
+    setLayers(prev => ({ ...prev, [key]: !prev[key] }));
+  }, []);
+
+  // Handle map click (for movement)
+  const handleMapContainerClick = useCallback((e: unknown) => {
+    // e is a Leaflet MouseEvent with latlng
+    const le = e as { latlng?: { lat: number; lng: number } };
+    if (!le.latlng) return;
+    const { lat, lng } = le.latlng;
+
+    if (selectedPlayerUnit && !actedSet.has(selectedPlayerUnit.id) && turnPhase === "player") {
+      const dist = distanceDeg(selectedPlayerUnit, { lat, lng });
+      if (dist <= selectedPlayerUnit.speed) {
+        setMoveTarget({ lat, lng });
+        onMapClick?.(lat, lng);
+      }
+    }
+  }, [selectedPlayerUnit, actedSet, turnPhase, onMapClick]);
+
+  // Handle map mouse move (for path preview)
+  const handleMapMouseMove = useCallback((e: unknown) => {
+    const le = e as { latlng?: { lat: number; lng: number } };
+    if (!le.latlng) return;
+    setMousePos({ lat: le.latlng.lat, lng: le.latlng.lng });
+  }, []);
 
   return (
     <div className="panel flex flex-col h-full">
@@ -263,6 +435,10 @@ export default function TacticalMap({ onSelectMarker, onMarkerClick, markers, en
               .leaflet-control-attribution { background: var(--bg-primary) !important; color: var(--text-dim) !important; font-size: 12px !important; opacity: 0.8; }
               .leaflet-control-attribution a { color: var(--text-dim) !important; }
               .custom-marker { background: transparent !important; border: none !important; }
+              @keyframes targeting-enemy-glow {
+                0%, 100% { box-shadow: 0 0 8px rgba(248,113,113,0.3); }
+                50% { box-shadow: 0 0 20px rgba(248,113,113,0.6), 0 0 40px rgba(248,113,113,0.2); }
+              }
             `}</style>
             <MapContainer
               center={[36.5, 137.5] as [number, number]}
@@ -270,6 +446,14 @@ export default function TacticalMap({ onSelectMarker, onMarkerClick, markers, en
               zoomControl={true}
               attributionControl={true}
               style={{ height: "100%", width: "100%" }}
+              // @ts-expect-error Leaflet event handlers
+              whenReady={(mapInstance: unknown) => {
+                const mi = mapInstance as { target?: { on?: (event: string, handler: (e: unknown) => void) => void } };
+                if (mi.target?.on) {
+                  mi.target.on("click", handleMapContainerClick);
+                  mi.target.on("mousemove", handleMapMouseMove);
+                }
+              }}
             >
               <TileLayer
                 key={theme}
@@ -291,21 +475,97 @@ export default function TacticalMap({ onSelectMarker, onMarkerClick, markers, en
                 />
               ))}
 
-              {/* Markers */}
+              {/* === Range circles (when player unit selected, hasn't acted, player phase) === */}
+              {rangeData && (
+                <>
+                  {/* Movement range: dashed cyan */}
+                  <Circle
+                    center={rangeData.center}
+                    radius={rangeData.moveRadiusM}
+                    pathOptions={{
+                      color: "#22d3ee",
+                      weight: 1.5,
+                      opacity: 0.5,
+                      fillColor: "#22d3ee",
+                      fillOpacity: 0.06,
+                      dashArray: "8 6",
+                    }}
+                  />
+                  {/* Attack range: dotted red */}
+                  <Circle
+                    center={rangeData.center}
+                    radius={rangeData.attackRadiusM}
+                    pathOptions={{
+                      color: "#f87171",
+                      weight: 1.5,
+                      opacity: 0.3,
+                      fillColor: "#f87171",
+                      fillOpacity: 0.03,
+                      dashArray: "4 4",
+                    }}
+                  />
+                </>
+              )}
+
+              {/* === Movement path preview (dashed line from unit to cursor) === */}
+              {pathPreview && (
+                <Polyline
+                  positions={[pathPreview.from, pathPreview.to]}
+                  pathOptions={{
+                    color: pathPreview.color,
+                    weight: 2,
+                    opacity: 0.6,
+                    dashArray: "6 4",
+                  }}
+                />
+              )}
+
+              {/* === Move target marker === */}
+              {moveTarget && (
+                <Marker
+                  position={[moveTarget.lat, moveTarget.lng] as [number, number]}
+                  icon={createMoveTargetIcon()}
+                />
+              )}
+
+              {/* Facility/map markers */}
               {filteredMarkers.map(m => (
                 <Marker
                   key={m.id}
                   position={[m.lat, m.lng] as [number, number]}
                   icon={createIcon(m)}
                   eventHandlers={{
-                    click: () => {
+                    click: (e: unknown) => {
+                      // Stop propagation so map click handler doesn't fire
+                      const le = e as { originalEvent?: Event };
+                      le.originalEvent?.stopPropagation?.();
                       onMarkerClick?.(m.id);
                       onSelectMarker?.(m.id);
                     },
                   }}
                 >
                   <Popup>
-                    <MarkerPopupContent marker={m} />
+                    <div className="min-w-[200px] p-0 text-text-primary" style={{ fontFamily: "var(--font-display)" }}>
+                      <div className="flex items-center gap-2 mb-2">
+                        <span
+                          className="readout text-xs uppercase px-1.5 py-0.5 rounded font-bold"
+                          style={{ color: statusColor(m.status), backgroundColor: `${statusColor(m.status)}15`, border: `1px solid ${statusColor(m.status)}40` }}
+                        >
+                          {m.type === "facility" ? "施設" : m.type === "vehicle" ? "車両" : m.type === "alert" ? "検知" : m.type === "drone" ? "ドローン" : "人員"}
+                        </span>
+                        <span
+                          className="readout text-xs uppercase px-1.5 py-0.5 rounded"
+                          style={{ color: statusColor(m.status), backgroundColor: `${statusColor(m.status)}10` }}
+                        >
+                          {m.status}
+                        </span>
+                      </div>
+                      <div className="text-sm font-semibold mb-1" style={{ color: "var(--text-primary)" }}>{m.label}</div>
+                      <div className="text-xs" style={{ color: "var(--text-secondary)" }}>{m.detail}</div>
+                      <div className="text-xs mt-1.5 pt-1.5 readout" style={{ color: "var(--text-dim)", borderTop: "1px solid var(--border-subtle)" }}>
+                        {m.lat.toFixed(4)}, {m.lng.toFixed(4)}
+                      </div>
+                    </div>
                   </Popup>
                 </Marker>
               ))}
@@ -328,14 +588,63 @@ export default function TacticalMap({ onSelectMarker, onMarkerClick, markers, en
                   />
                 ))}
 
-              {/* Enemy unit markers */}
+              {/* === Player unit markers with HP bars === */}
+              {playerUnits?.filter(u => u.status !== "destroyed").map(unit => (
+                <Marker
+                  key={`player-${unit.id}`}
+                  position={[unit.lat, unit.lng] as [number, number]}
+                  icon={createPlayerIcon(unit)}
+                  eventHandlers={{
+                    click: (e: unknown) => {
+                      const le = e as { originalEvent?: Event };
+                      le.originalEvent?.stopPropagation?.();
+                      onMarkerClick?.(unit.id);
+                      onSelectMarker?.(unit.id);
+                    },
+                  }}
+                >
+                  <Popup>
+                    <div className="min-w-[200px] p-0 text-text-primary" style={{ fontFamily: "var(--font-display)" }}>
+                      <div className="flex items-center gap-2 mb-2">
+                        <span className="readout text-xs uppercase px-1.5 py-0.5 rounded font-bold"
+                          style={{ color: "#22d3ee", backgroundColor: "rgba(34,211,238,0.15)", border: "1px solid rgba(34,211,238,0.4)" }}>
+                          味方
+                        </span>
+                        <span className="readout text-xs uppercase px-1.5 py-0.5 rounded"
+                          style={{ color: "#22d3ee", backgroundColor: "rgba(34,211,238,0.1)" }}>
+                          {unit.status === "idle" ? "待機" : unit.status === "moving" ? "移動中" : unit.status === "engaging" ? "交戦中" : unit.status === "damaged" ? "損傷" : "壊滅"}
+                        </span>
+                        {actedSet.has(unit.id) && (
+                          <span className="readout text-xs px-1.5 py-0.5 rounded" style={{ color: "#34d399", backgroundColor: "rgba(52,211,153,0.1)" }}>
+                            行動済
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-sm font-semibold mb-1" style={{ color: "var(--text-primary)" }}>{unit.name}</div>
+                      <div className="text-xs mb-1" style={{ color: "var(--text-secondary)" }}>{unit.detail}</div>
+                      <div className="flex items-center gap-3 text-xs readout" style={{ color: "var(--text-dim)" }}>
+                        <span>HP {unit.hp}/{unit.maxHp}</span>
+                        <span>ATK {unit.attack}</span>
+                        <span>DEF {unit.defense}</span>
+                      </div>
+                      <div className="text-xs mt-1.5 pt-1.5 readout" style={{ color: "var(--text-dim)", borderTop: "1px solid var(--border-subtle)" }}>
+                        {unit.lat.toFixed(4)}, {unit.lng.toFixed(4)}
+                      </div>
+                    </div>
+                  </Popup>
+                </Marker>
+              ))}
+
+              {/* === Enemy unit markers with HP bars === */}
               {enemyUnits?.filter(u => u.status !== "destroyed").map(unit => (
                 <Marker
                   key={`enemy-${unit.id}`}
                   position={[unit.lat, unit.lng] as [number, number]}
                   icon={createEnemyIcon(unit)}
                   eventHandlers={{
-                    click: () => {
+                    click: (e: unknown) => {
+                      const le = e as { originalEvent?: Event };
+                      le.originalEvent?.stopPropagation?.();
                       onMarkerClick?.(unit.id);
                       onSelectMarker?.(unit.id);
                     },

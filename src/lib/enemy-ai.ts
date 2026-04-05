@@ -157,6 +157,7 @@ export function moveEnemyUnits(state: GameState): GameUnit[] {
 
 // ---------------------------------------------------------------------------
 // 3. Resolve combat engagements — using combat-rules system
+//    (kept for backward compatibility)
 // ---------------------------------------------------------------------------
 
 export interface EngagementResult {
@@ -277,5 +278,182 @@ export function resolveEngagements(state: GameState): EngagementResult {
     updatedPlayer: Array.from(playerMap.values()),
     updatedEnemy: Array.from(enemyMap.values()),
     combatLog,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// 4. Process full enemy turn — move + attack in one pass (turn-based engine)
+// ---------------------------------------------------------------------------
+
+export interface EnemyTurnResult {
+  units: GameUnit[];
+  playerUnits: GameUnit[];
+  log: string[];
+}
+
+/**
+ * Process the entire enemy phase: each enemy either attacks if a target is in
+ * range, or moves toward the best target. Returns updated enemy units, updated
+ * player units (from enemy attacks), and log messages.
+ */
+export function processEnemyTurn(state: GameState): EnemyTurnResult {
+  const livingPlayerUnits = state.playerUnits.filter(
+    (u) => u.status !== "destroyed",
+  );
+  const playerFacilities = livingPlayerUnits.filter((u) =>
+    u.id.startsWith("base-"),
+  );
+
+  const playerMap = new Map(state.playerUnits.map((u) => [u.id, { ...u }]));
+  const enemyResults: GameUnit[] = [];
+  const log: string[] = [];
+
+  for (const enemy of state.enemyUnits) {
+    if (enemy.status === "destroyed") {
+      enemyResults.push(enemy);
+      continue;
+    }
+
+    const updatedEnemy = { ...enemy };
+    const enemyRange = enemy.range ?? getAttackRange(enemy.type);
+
+    // --- Smart targeting: prefer units we have type advantage against ---
+    let bestTarget: GameUnit | undefined;
+    let bestScore = -Infinity;
+
+    // Score living player units from the mutable map (reflects prior damage)
+    for (const [, target] of playerMap) {
+      if (target.status === "destroyed") continue;
+      const d = distance(enemy, target);
+      const typeAdv = getTypeAdvantage(enemy.type, target.type);
+
+      let score = typeAdv * 100;
+      score += Math.max(0, 20 - d * 5);
+      score += (1 - target.hp / target.maxHp) * 30;
+      if (target.id.startsWith("base-")) score += 15;
+
+      if (score > bestScore) {
+        bestScore = score;
+        bestTarget = target;
+      }
+    }
+
+    if (!bestTarget) {
+      // Fallback: pick nearest facility
+      let closest: GameUnit | undefined;
+      let closestDist = Infinity;
+      for (const fac of playerFacilities) {
+        const d = distance(enemy, fac);
+        if (d < closestDist) {
+          closestDist = d;
+          closest = fac;
+        }
+      }
+      bestTarget = closest;
+    }
+
+    if (!bestTarget) {
+      enemyResults.push(updatedEnemy);
+      continue;
+    }
+
+    const d = distance(enemy, bestTarget);
+
+    // --- Attack if target is in range ---
+    if (d <= enemyRange) {
+      updatedEnemy.status = "engaging";
+      updatedEnemy.targetId = bestTarget.id;
+
+      // Get the mutable reference to the target
+      const mutableTarget = playerMap.get(bestTarget.id);
+      if (mutableTarget && mutableTarget.status !== "destroyed") {
+        const nearFacility = isNearFriendlyFacility(
+          mutableTarget,
+          Array.from(playerMap.values()),
+        );
+        const result = calculateDamage(updatedEnemy, mutableTarget, nearFacility);
+        mutableTarget.hp = Math.max(0, mutableTarget.hp - result.damage);
+
+        const destroyed = mutableTarget.hp <= 0;
+        if (destroyed) {
+          mutableTarget.status = "destroyed";
+        } else {
+          mutableTarget.status = "damaged";
+        }
+
+        log.push(
+          formatCombatLog({
+            attackerName: updatedEnemy.name,
+            defenderName: mutableTarget.name,
+            damage: result.damage,
+            advantage: result.advantage,
+            critical: result.critical,
+            defenderDestroyed: destroyed,
+          }),
+        );
+
+        if (result.advantage === "strong") {
+          log.push(`  └ 有利な戦闘（${updatedEnemy.type} → ${mutableTarget.type}）`);
+        } else if (result.advantage === "weak") {
+          log.push(`  └ 不利な戦闘（${updatedEnemy.type} → ${mutableTarget.type}）`);
+        }
+        if (result.critical && !destroyed) {
+          log.push(`  └ クリティカルヒット！`);
+        }
+        if (nearFacility) {
+          log.push(`  └ 施設防御ボーナス適用（被ダメ-20%）`);
+        }
+
+        // Counter-attack: if the player unit is alive and the enemy is in
+        // the player unit's range, the player unit fires back
+        if (!destroyed && mutableTarget.status !== "destroyed") {
+          const playerRange = mutableTarget.range ?? getAttackRange(mutableTarget.type);
+          const counterDist = distance(mutableTarget, updatedEnemy);
+          if (counterDist <= playerRange) {
+            const counterResult = calculateDamage(mutableTarget, updatedEnemy, false);
+            updatedEnemy.hp = Math.max(0, updatedEnemy.hp - counterResult.damage);
+            const enemyDestroyed = updatedEnemy.hp <= 0;
+            if (enemyDestroyed) {
+              updatedEnemy.status = "destroyed";
+            }
+            log.push(
+              formatCombatLog({
+                attackerName: mutableTarget.name,
+                defenderName: updatedEnemy.name,
+                damage: counterResult.damage,
+                advantage: counterResult.advantage,
+                critical: counterResult.critical,
+                defenderDestroyed: enemyDestroyed,
+              }),
+            );
+            if (counterResult.advantage === "strong") {
+              log.push(`  └ 反撃有利（${mutableTarget.type} → ${updatedEnemy.type}）`);
+            }
+          }
+        }
+      }
+    } else {
+      // --- Move toward target ---
+      const step = Math.min(enemy.speed, d - enemyRange * 0.8);
+      if (step > 0) {
+        const ratio = step / d;
+        updatedEnemy.lat = enemy.lat + (bestTarget.lat - enemy.lat) * ratio;
+        updatedEnemy.lng = enemy.lng + (bestTarget.lng - enemy.lng) * ratio;
+        updatedEnemy.status = "moving";
+        updatedEnemy.targetId = bestTarget.id;
+        log.push(`${updatedEnemy.name} が ${bestTarget.name} へ接近`);
+      } else {
+        updatedEnemy.status = "engaging";
+        updatedEnemy.targetId = bestTarget.id;
+      }
+    }
+
+    enemyResults.push(updatedEnemy);
+  }
+
+  return {
+    units: enemyResults,
+    playerUnits: Array.from(playerMap.values()),
+    log,
   };
 }

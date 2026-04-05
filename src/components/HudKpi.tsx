@@ -1,6 +1,6 @@
 "use client";
 
-import { TrendingUp, TrendingDown, Minus } from "lucide-react";
+import { TrendingUp, TrendingDown, Minus, Package } from "lucide-react";
 import { KPI_DATA, type KpiData, type SeverityLevel } from "@/lib/mock-data";
 
 function severityColor(s: SeverityLevel) {
@@ -43,17 +43,51 @@ function KpiCard({ data }: { data: KpiData }) {
   );
 }
 
-interface HudKpiProps {
-  data?: KpiData[];
+function SupplyKpiCard({ supply, netPerTurn }: { supply: number; netPerTurn: number }) {
+  const sev: SeverityLevel = supply < 20 ? "critical" : supply < 40 ? "warning" : "normal";
+  const c = severityColor(sev);
+  const trendDir: KpiData["trend"] = netPerTurn > 0 ? "up" : netPerTurn < 0 ? "down" : "stable";
+  const trendLabel = netPerTurn > 0 ? `+${netPerTurn}/T` : netPerTurn < 0 ? `${netPerTurn}/T` : "±0/T";
+
+  return (
+    <div className={`flex items-center gap-3 ${c.bg} border ${c.border} rounded-lg px-4 py-2 ${supply < 30 ? "supply-low-pulse" : ""}`}>
+      <div>
+        <div className="readout text-xs text-text-dim uppercase tracking-wider flex items-center gap-1">
+          <Package className="w-3 h-3" />
+          補給
+        </div>
+        <div className="flex items-baseline gap-1 mt-0.5">
+          <span className={`readout text-lg font-bold ${c.text}`}>{supply}</span>
+        </div>
+      </div>
+      <div className={`flex items-center gap-0.5 text-xs readout ${
+        trendDir === "up" ? "text-alert-success" :
+        trendDir === "down" ? "text-alert-critical" :
+        "text-text-dim"
+      }`}>
+        <TrendIcon trend={trendDir} />
+        <span>{trendLabel}</span>
+      </div>
+    </div>
+  );
 }
 
-export default function HudKpi({ data }: HudKpiProps = {}) {
+interface HudKpiProps {
+  data?: KpiData[];
+  supply?: number;
+  supplyNet?: number;
+}
+
+export default function HudKpi({ data, supply, supplyNet }: HudKpiProps) {
   const items = data ?? KPI_DATA;
   return (
     <div className="flex items-center gap-2 overflow-x-auto">
       {items.map(d => (
         <KpiCard key={d.label} data={d} />
       ))}
+      {typeof supply === "number" && (
+        <SupplyKpiCard supply={supply} netPerTurn={supplyNet ?? 0} />
+      )}
     </div>
   );
 }

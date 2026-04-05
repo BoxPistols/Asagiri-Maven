@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { ALERT_ITEMS, type AlertItem, type SeverityLevel } from "@/lib/mock-data";
-import { AlertTriangle, AlertCircle, Info, ChevronDown, Zap, MapPin, ArrowRight, Send } from "lucide-react";
+import { AlertTriangle, AlertCircle, Info, ChevronDown, Zap, MapPin, ArrowRight, Crosshair, Shield } from "lucide-react";
 
 function sevConfig(s: SeverityLevel) {
   switch (s) {
@@ -18,12 +18,13 @@ function scoreColor(score: number) {
   return "var(--accent-cyan)";
 }
 
-function AlertCard({ alert, isExpanded, onToggle, onSelectMarker, onDispatch }: {
+function AlertCard({ alert, isExpanded, onToggle, onSelectMarker, linkedEnemyCount, threatRange }: {
   alert: AlertItem;
   isExpanded: boolean;
   onToggle: () => void;
   onSelectMarker?: (id: string) => void;
-  onDispatch?: (eventId: string) => void;
+  linkedEnemyCount?: number;
+  threatRange?: "near" | "mid" | "far" | null;
 }) {
   const cfg = sevConfig(alert.severity);
   const Icon = cfg.icon;
@@ -54,6 +55,31 @@ function AlertCard({ alert, isExpanded, onToggle, onSelectMarker, onDispatch }: 
       {isExpanded && (
         <div className="mt-3 ml-7 animate-slide-up">
           <p className="text-xs text-text-secondary leading-relaxed mb-3">{alert.description}</p>
+
+          {/* Enemy / threat info row */}
+          {(typeof linkedEnemyCount === "number" || threatRange) && (
+            <div className="flex items-center gap-3 mb-3">
+              {typeof linkedEnemyCount === "number" && linkedEnemyCount > 0 && (
+                <span className="readout text-xs text-alert-critical flex items-center gap-1 bg-alert-critical/8 border border-alert-critical/15 rounded px-2 py-1">
+                  <Crosshair className="w-3 h-3" />
+                  関連敵: {linkedEnemyCount}体
+                </span>
+              )}
+              {threatRange && (
+                <span className={`readout text-xs flex items-center gap-1 rounded px-2 py-1 border ${
+                  threatRange === "near"
+                    ? "text-alert-critical bg-alert-critical/8 border-alert-critical/15"
+                    : threatRange === "mid"
+                      ? "text-alert-warning bg-alert-warning/5 border-alert-warning/12"
+                      : "text-accent-cyan bg-accent-cyan/3 border-accent-cyan/10"
+                }`}>
+                  <Shield className="w-3 h-3" />
+                  脅威射程: {threatRange === "near" ? "近距離" : threatRange === "mid" ? "中距離" : "遠距離"}
+                </span>
+              )}
+            </div>
+          )}
+
           <div className={`flex items-start gap-2.5 p-3 rounded-lg ${cfg.bg} border ${cfg.border}`}>
             <Zap className={`w-4 h-4 ${cfg.color} shrink-0`} />
             <div>
@@ -65,20 +91,15 @@ function AlertCard({ alert, isExpanded, onToggle, onSelectMarker, onDispatch }: 
             <button className="btn-approve flex-1 justify-center">
               <ArrowRight className="w-3.5 h-3.5" /> 承認・実行
             </button>
-            {onDispatch && (
-              <button
-                className="btn-tactical flex-1 justify-center !border-accent-indigo/40 !text-accent-indigo hover:!bg-accent-indigo/10"
-                onClick={e => { e.stopPropagation(); onDispatch(alert.id); }}
-              >
-                <Send className="w-3.5 h-3.5" /> 派遣
-              </button>
-            )}
             {alert.markerId && (
               <button
-                className="btn-tactical"
-                onClick={e => { e.stopPropagation(); onSelectMarker?.(alert.markerId!); }}
+                className="btn-tactical flex-1 justify-center"
+                onClick={e => {
+                  e.stopPropagation();
+                  onSelectMarker?.(alert.markerId!);
+                }}
               >
-                <MapPin className="w-3.5 h-3.5" /> 地図
+                <MapPin className="w-3.5 h-3.5" /> 地図で確認
               </button>
             )}
           </div>
@@ -88,13 +109,19 @@ function AlertCard({ alert, isExpanded, onToggle, onSelectMarker, onDispatch }: 
   );
 }
 
+interface EnemyLinkInfo {
+  linkedEnemyCount: number;
+  threatRange: "near" | "mid" | "far" | null;
+}
+
 interface AiTriageProps {
   onSelectMarker?: (id: string) => void;
   alerts?: AlertItem[];
-  onDispatch?: (eventId: string) => void;
+  /** Map from alert id to linked-enemy metadata */
+  enemyLinks?: Record<string, EnemyLinkInfo>;
 }
 
-export default function AiTriage({ onSelectMarker, alerts, onDispatch }: AiTriageProps) {
+export default function AiTriage({ onSelectMarker, alerts, enemyLinks }: AiTriageProps) {
   const [expandedId, setExpandedId] = useState<string | null>("alt-1");
   const data = alerts ?? ALERT_ITEMS;
   const sorted = [...data].sort((a, b) => b.score - a.score);
@@ -108,16 +135,20 @@ export default function AiTriage({ onSelectMarker, alerts, onDispatch }: AiTriag
         </span>
       </div>
       <div className="flex-1 overflow-y-auto">
-        {sorted.map(alert => (
-          <AlertCard
-            key={alert.id}
-            alert={alert}
-            isExpanded={expandedId === alert.id}
-            onToggle={() => setExpandedId(prev => prev === alert.id ? null : alert.id)}
-            onSelectMarker={onSelectMarker}
-            onDispatch={onDispatch}
-          />
-        ))}
+        {sorted.map(alert => {
+          const link = enemyLinks?.[alert.id];
+          return (
+            <AlertCard
+              key={alert.id}
+              alert={alert}
+              isExpanded={expandedId === alert.id}
+              onToggle={() => setExpandedId(prev => prev === alert.id ? null : alert.id)}
+              onSelectMarker={onSelectMarker}
+              linkedEnemyCount={link?.linkedEnemyCount}
+              threatRange={link?.threatRange}
+            />
+          );
+        })}
       </div>
     </div>
   );

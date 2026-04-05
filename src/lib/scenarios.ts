@@ -45,6 +45,7 @@ const wave1: WaveConfig = {
   name: "偵察",
   description: "敵偵察ドローンが太平洋側から接近。情報収集と初期対応。",
   turns: 4,
+  supplyBonus: 30,
   briefing:
     "敵勢力の偵察活動を確認。小規模ドローンが接近中。まずは状況を把握し、対処してください。",
   intel: [
@@ -110,6 +111,7 @@ const wave2: WaveConfig = {
   name: "サイバー攻撃",
   description: "電子戦攻撃により通信・センサー網が脅威に晒される。",
   turns: 5,
+  supplyBonus: 30,
   briefing:
     "電子戦攻撃を検知。通信網とセンサーシステムに異常が発生しています。サイバー防御を優先してください。",
   intel: [
@@ -190,6 +192,7 @@ const wave3: WaveConfig = {
   name: "海上封鎖",
   description: "敵艦隊が主要航路を封鎖。補給線の防衛が急務。",
   turns: 6,
+  supplyBonus: 30,
   briefing:
     "敵艦隊が主要航路を封鎖中。補給線の確保が最優先です。海上戦力を展開してください。",
   intel: [
@@ -273,6 +276,7 @@ const wave4: WaveConfig = {
   name: "多方面侵攻",
   description: "複数方面からの同時攻撃。戦力配分が勝敗を分ける。",
   turns: 7,
+  supplyBonus: 30,
   briefing:
     "複数方面からの同時攻撃を確認。全拠点で防衛態勢を強化。戦力の配分が勝敗を分けます。",
   intel: [
@@ -375,6 +379,7 @@ const wave5: WaveConfig = {
   name: "最終決戦",
   description: "敵司令艦を撃沈し、侵攻作戦を終結させよ。",
   turns: 6,
+  supplyBonus: 30,
   briefing:
     "敵司令艦を捕捉。これが最後の戦いです。全戦力を集中し、敵指揮系統を無力化せよ。",
   intel: [

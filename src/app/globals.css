@@ -451,3 +451,198 @@ body::after {
 [data-theme="light"] .animate-explosion {
   filter: brightness(0.8);
 }
+
+/* ========== Phase Indicator (persistent pill) ========== */
+.phase-indicator {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1100;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 18px;
+  border-radius: 20px;
+  border: 1px solid;
+  background: var(--bg-surface);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.2);
+  transition: border-color 0.3s ease, color 0.3s ease, box-shadow 0.3s ease;
+}
+[data-theme="light"] .phase-indicator {
+  box-shadow: 0 1px 6px rgba(0,0,0,0.08);
+}
+
+.phase-indicator-diamond {
+  font-size: 10px;
+  opacity: 0.7;
+}
+.phase-indicator-label {
+  font-weight: 600;
+}
+.phase-indicator-sep {
+  opacity: 0.4;
+}
+.phase-indicator-sub {
+  opacity: 0.7;
+  font-size: 11px;
+}
+.phase-indicator-turn {
+  opacity: 0.4;
+  font-size: 11px;
+  margin-left: 4px;
+}
+
+.phase-player {
+  border-color: var(--accent-cyan);
+  color: var(--accent-cyan);
+  box-shadow: 0 0 12px rgba(34,211,238,0.1), 0 2px 12px rgba(0,0,0,0.2);
+}
+.phase-enemy {
+  border-color: var(--alert-critical);
+  color: var(--alert-critical);
+  box-shadow: 0 0 12px rgba(248,113,113,0.12), 0 2px 12px rgba(0,0,0,0.2);
+}
+.phase-resolution {
+  border-color: var(--accent-purple);
+  color: var(--accent-purple);
+  box-shadow: 0 0 12px rgba(192,132,252,0.1), 0 2px 12px rgba(0,0,0,0.2);
+}
+[data-theme="light"] .phase-player,
+[data-theme="light"] .phase-enemy,
+[data-theme="light"] .phase-resolution {
+  box-shadow: 0 1px 6px rgba(0,0,0,0.08);
+}
+
+/* ========== Phase Transition Overlays ========== */
+
+/* Player phase: cyan fade in/out */
+@keyframes phase-enter-player {
+  0%   { opacity: 0; }
+  20%  { opacity: 1; }
+  75%  { opacity: 1; }
+  100% { opacity: 0; }
+}
+.animate-phase-player {
+  animation: phase-enter-player 0.6s ease-in-out forwards;
+}
+
+/* Enemy phase: red with slight shake */
+@keyframes phase-enter-enemy {
+  0%   { opacity: 0; transform: scale(1); }
+  10%  { opacity: 1; transform: scale(1.01); }
+  15%  { transform: scale(1) translateX(-2px); }
+  20%  { transform: scale(1) translateX(2px); }
+  25%  { transform: scale(1) translateX(0); }
+  70%  { opacity: 1; }
+  100% { opacity: 0; }
+}
+.animate-phase-enemy {
+  animation: phase-enter-enemy 0.8s ease-in-out forwards;
+}
+
+/* Resolution: quick purple flash */
+@keyframes resolution-flash {
+  0%   { opacity: 0; }
+  15%  { opacity: 0.6; }
+  100% { opacity: 0; }
+}
+.animate-resolution-flash {
+  animation: resolution-flash 0.35s ease-out forwards;
+}
+
+/* Wave start: dramatic hold */
+@keyframes wave-reveal {
+  0%   { opacity: 0; }
+  10%  { opacity: 1; }
+  85%  { opacity: 1; }
+  100% { opacity: 0; }
+}
+.animate-wave-reveal {
+  animation: wave-reveal 1.5s ease-in-out forwards;
+}
+
+/* Wave text fade-in */
+@keyframes wave-text-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Decorative line expansion for wave banner */
+@keyframes line-expand {
+  from { width: 0; opacity: 0; }
+  to   { width: 200px; opacity: 0.6; }
+}
+.animate-line-expand {
+  animation: line-expand 0.6s 0.2s ease-out forwards;
+}
+
+/* Phase pulse — generic keyframe for reuse */
+@keyframes phase-pulse {
+  0%, 100% { opacity: 0.6; }
+  50% { opacity: 1; }
+}
+
+/* ========== Enemy Phase Vignette ========== */
+.enemy-phase-vignette {
+  background: radial-gradient(
+    ellipse at center,
+    transparent 50%,
+    rgba(248, 113, 113, 0.08) 100%
+  );
+  pointer-events: none;
+}
+
+/* ========== Action Button States ========== */
+.action-btn {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 8px 16px;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-surface);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  border-radius: 4px;
+  min-height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+.action-btn:hover {
+  background: var(--bg-elevated);
+  border-color: var(--border-active);
+  color: var(--text-primary);
+}
+.action-btn:active { transform: scale(0.97); }
+
+.action-btn-active {
+  border-color: var(--accent-cyan);
+  background: rgba(34, 211, 238, 0.08);
+  color: var(--accent-cyan);
+  box-shadow: 0 0 8px rgba(34, 211, 238, 0.1);
+}
+
+.action-btn-disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+/* ========== Supply Low Warning Pulse ========== */
+@keyframes supply-low {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(248, 113, 113, 0); }
+  50% { box-shadow: 0 0 10px 2px rgba(248, 113, 113, 0.2); }
+}
+.supply-low-pulse {
+  animation: supply-low 2s ease-in-out infinite;
+}

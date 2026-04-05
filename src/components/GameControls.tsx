@@ -1,59 +1,87 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { SkipForward, Pause, Play, Swords, Clock, Zap } from "lucide-react";
-import type { GamePhase } from "@/lib/game-types";
+import { useState, useCallback } from "react";
+import { Move, Swords, Wrench, Clock, Flag, ChevronRight, Pause, Play, SkipForward, Loader } from "lucide-react";
+import type { GamePhase, GameUnit, TurnPhase } from "@/lib/game-types";
+
+// ---------------------------------------------------------------------------
+// Props
+// ---------------------------------------------------------------------------
 
 interface GameControlsProps {
   turn: number;
   maxTurns: number;
   wave: number;
   phase: GamePhase;
-  onNextTurn: () => void;
+  turnPhase: TurnPhase;
+  supply: number;
+  selectedUnit: GameUnit | null;
+  unactedCount: number;
+  canRepair: boolean;
+  onMove: () => void;
+  onAttack: () => void;
+  onRepair: () => void;
+  onWait: () => void;
+  onEndPlayerPhase: () => void;
+  onProcessEnemy: () => void;
+  onProcessResolution: () => void;
   onPause: () => void;
   onResume: () => void;
 }
 
-const SPEED_OPTIONS = [
-  { label: "手動", ms: 0 },
-  { label: "遅い", ms: 5000 },
-  { label: "普通", ms: 3000 },
-  { label: "速い", ms: 1500 },
-];
+// ---------------------------------------------------------------------------
+// Component
+// ---------------------------------------------------------------------------
 
 export default function GameControls({
   turn,
   maxTurns,
   wave,
   phase,
-  onNextTurn,
+  turnPhase,
+  supply,
+  selectedUnit,
+  unactedCount,
+  canRepair,
+  onMove,
+  onAttack,
+  onRepair,
+  onWait,
+  onEndPlayerPhase,
+  onProcessEnemy,
+  onProcessResolution,
   onPause,
   onResume,
 }: GameControlsProps) {
-  const [speedIdx, setSpeedIdx] = useState(2); // default: 普通
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [showEndConfirm, setShowEndConfirm] = useState(false);
+
   const isPaused = phase === "paused";
   const isPlaying = phase === "playing";
-
-  // Auto-advance timer
-  useEffect(() => {
-    if (intervalRef.current) {
-      clearInterval(intervalRef.current);
-      intervalRef.current = null;
-    }
-    const ms = SPEED_OPTIONS[speedIdx].ms;
-    if (ms > 0 && isPlaying) {
-      intervalRef.current = setInterval(onNextTurn, ms);
-    }
-    return () => {
-      if (intervalRef.current) clearInterval(intervalRef.current);
-    };
-  }, [speedIdx, isPlaying, onNextTurn]);
 
   if (phase !== "playing" && phase !== "paused") return null;
 
   const turnProgress = maxTurns > 0 ? (turn / maxTurns) * 100 : 0;
-  const autoMode = SPEED_OPTIONS[speedIdx].ms > 0;
+
+  // Can act: unit is selected, is player, hasn't acted, not destroyed, has speed > 0
+  const canAct = selectedUnit
+    && selectedUnit.faction === "player"
+    && !selectedUnit.actedThisTurn
+    && selectedUnit.status !== "destroyed"
+    && selectedUnit.speed > 0
+    && turnPhase === "player";
+
+  const handleEndPhase = useCallback(() => {
+    if (unactedCount > 0 && !showEndConfirm) {
+      setShowEndConfirm(true);
+      return;
+    }
+    setShowEndConfirm(false);
+    onEndPlayerPhase();
+  }, [unactedCount, showEndConfirm, onEndPlayerPhase]);
+
+  const handleCancelEnd = useCallback(() => {
+    setShowEndConfirm(false);
+  }, []);
 
   return (
     <div className="game-controls">
@@ -65,64 +93,152 @@ export default function GameControls({
         />
       </div>
 
-      <div className="flex items-center gap-3 px-4 py-3">
-        {/* Wave + Turn */}
-        <div className="flex items-center gap-3 readout">
-          <div className="flex items-center gap-1.5 text-sm">
-            <Swords className="w-4 h-4 text-accent-cyan" />
-            <span className="text-accent-cyan font-bold">WAVE {wave}/5</span>
+      <div className="flex items-center gap-2 px-3 py-2.5">
+        {/* Wave + Turn + Supply */}
+        <div className="flex items-center gap-2 readout shrink-0">
+          <div className="flex items-center gap-1 text-xs">
+            <Swords className="w-3.5 h-3.5 text-accent-cyan" />
+            <span className="text-accent-cyan font-bold">W{wave}</span>
           </div>
-          <div className="h-5 w-px bg-border-subtle" />
-          <div className="flex items-center gap-1.5 text-sm">
-            <Clock className="w-4 h-4 text-text-dim" />
+          <div className="h-4 w-px bg-border-subtle" />
+          <div className="flex items-center gap-1 text-xs">
+            <Clock className="w-3.5 h-3.5 text-text-dim" />
             <span className="text-text-primary font-bold">{turn}</span>
-            <span className="text-text-dim">/ {maxTurns}</span>
+            <span className="text-text-dim">/{maxTurns}</span>
+          </div>
+          <div className="h-4 w-px bg-border-subtle" />
+          <div className="flex items-center gap-1 text-xs">
+            <span className="text-alert-warning">補給:</span>
+            <span className="text-text-primary font-bold">{supply}</span>
           </div>
         </div>
 
-        <div className="flex-1" />
+        <div className="h-4 w-px bg-border-subtle" />
 
-        {/* Speed selector */}
-        <div className="flex items-center gap-1 bg-bg-deep/60 rounded-md p-0.5">
-          {SPEED_OPTIONS.map((opt, i) => (
+        {/* ===== PLAYER PHASE ===== */}
+        {turnPhase === "player" && (
+          <>
+            {/* Action buttons */}
+            <div className="flex items-center gap-1">
+              <button
+                onClick={onMove}
+                disabled={!canAct}
+                className="btn-tactical py-1.5 px-2.5 gap-1 text-xs disabled:opacity-30 disabled:cursor-not-allowed"
+                title="移動"
+              >
+                <Move className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">移動</span>
+              </button>
+
+              <button
+                onClick={onAttack}
+                disabled={!canAct}
+                className="btn-tactical py-1.5 px-2.5 gap-1 text-xs !border-alert-critical/30 !text-alert-critical hover:!bg-alert-critical/10 disabled:opacity-30 disabled:cursor-not-allowed disabled:!border-border-subtle disabled:!text-text-dim"
+                title="攻撃"
+              >
+                <Swords className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">攻撃</span>
+              </button>
+
+              <button
+                onClick={onRepair}
+                disabled={!canAct || !canRepair}
+                className="btn-tactical py-1.5 px-2.5 gap-1 text-xs !border-alert-success/30 !text-alert-success hover:!bg-alert-success/10 disabled:opacity-30 disabled:cursor-not-allowed disabled:!border-border-subtle disabled:!text-text-dim"
+                title="修理"
+              >
+                <Wrench className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">修理</span>
+              </button>
+
+              <button
+                onClick={onWait}
+                disabled={!canAct}
+                className="btn-tactical py-1.5 px-2.5 gap-1 text-xs disabled:opacity-30 disabled:cursor-not-allowed"
+                title="待機"
+              >
+                <Clock className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">待機</span>
+              </button>
+            </div>
+
+            <div className="flex-1" />
+
+            {/* Unacted count */}
+            <div className="readout text-xs text-text-dim shrink-0">
+              残り <span className="text-accent-cyan font-bold">{unactedCount}</span> 部隊未行動
+            </div>
+
+            <div className="h-4 w-px bg-border-subtle" />
+
+            {/* Pause */}
             <button
-              key={opt.label}
-              onClick={() => setSpeedIdx(i)}
-              className={`readout text-xs px-2.5 py-1 rounded transition-colors ${
-                i === speedIdx
-                  ? "bg-accent-cyan/15 text-accent-cyan"
-                  : "text-text-dim hover:text-text-secondary"
-              }`}
+              onClick={isPaused ? onResume : onPause}
+              className="btn-tactical py-1.5 px-2"
+              aria-label={isPaused ? "再開" : "一時停止"}
             >
-              {opt.label}
+              {isPaused ? <Play className="w-3.5 h-3.5" /> : <Pause className="w-3.5 h-3.5" />}
             </button>
-          ))}
-        </div>
 
-        <div className="h-5 w-px bg-border-subtle" />
+            {/* End turn */}
+            {!showEndConfirm ? (
+              <button
+                onClick={handleEndPhase}
+                className="btn-approve py-1.5 px-4 gap-1.5 text-xs"
+              >
+                <Flag className="w-3.5 h-3.5" />
+                ターン終了
+              </button>
+            ) : (
+              <div className="flex items-center gap-1.5 animate-slide-up">
+                <span className="readout text-xs text-alert-warning">
+                  未行動部隊あり
+                </span>
+                <button
+                  onClick={handleEndPhase}
+                  className="btn-approve py-1.5 px-3 gap-1 text-xs !bg-alert-warning/20 !border-alert-warning/40 !text-alert-warning"
+                >
+                  <ChevronRight className="w-3.5 h-3.5" />
+                  確認
+                </button>
+                <button
+                  onClick={handleCancelEnd}
+                  className="btn-tactical py-1.5 px-2.5 text-xs"
+                >
+                  戻る
+                </button>
+              </div>
+            )}
+          </>
+        )}
 
-        {/* Pause/Resume */}
-        <button
-          onClick={isPaused ? onResume : onPause}
-          className="btn-tactical py-2 px-3"
-          aria-label={isPaused ? "再開" : "一時停止"}
-        >
-          {isPaused ? <Play className="w-4 h-4" /> : <Pause className="w-4 h-4" />}
-        </button>
+        {/* ===== ENEMY PHASE ===== */}
+        {turnPhase === "enemy" && (
+          <>
+            <div className="flex-1 flex items-center justify-center gap-2">
+              <Loader className="w-4 h-4 text-alert-critical animate-spin" />
+              <span className="readout text-sm text-alert-critical tracking-wider">
+                敵フェーズ実行中
+              </span>
+            </div>
+            <button
+              onClick={onProcessEnemy}
+              className="btn-tactical py-1.5 px-4 gap-1.5 text-xs !border-alert-critical/30 !text-alert-critical"
+            >
+              <SkipForward className="w-3.5 h-3.5" />
+              スキップ
+            </button>
+          </>
+        )}
 
-        {/* Next Turn (manual) */}
-        <button
-          onClick={onNextTurn}
-          disabled={isPaused}
-          className="btn-approve py-2 px-5 gap-2 text-sm disabled:opacity-40 disabled:cursor-not-allowed"
-        >
-          {autoMode ? (
-            <Zap className="w-4 h-4" />
-          ) : (
-            <SkipForward className="w-4 h-4" />
-          )}
-          {autoMode ? "次へ" : "次のターン"}
-        </button>
+        {/* ===== RESOLUTION PHASE ===== */}
+        {turnPhase === "resolution" && (
+          <div className="flex-1 flex items-center justify-center gap-2">
+            <Loader className="w-4 h-4 text-accent-indigo animate-spin" />
+            <span className="readout text-sm text-accent-indigo tracking-wider">
+              結果処理中
+            </span>
+          </div>
+        )}
       </div>
     </div>
   );
