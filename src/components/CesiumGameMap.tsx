@@ -141,17 +141,34 @@ export default function CesiumGameMap({
         if (destroyed || !containerRef.current) return;
         if (CESIUM_ION_TOKEN) Cesium.Ion.defaultAccessToken = CESIUM_ION_TOKEN;
 
+        // Use OpenStreetMap as imagery (no Cesium Ion required for base imagery)
+        // Cesium Ion terrain is added below if available, otherwise uses ellipsoid
+        const osmProvider = new Cesium.OpenStreetMapImageryProvider({
+          url: "https://tile.openstreetmap.org/",
+        });
+
         viewer = new Cesium.Viewer(containerRef.current, {
           timeline: false, animation: false, geocoder: false, homeButton: false,
           sceneModePicker: false, baseLayerPicker: false, navigationHelpButton: false,
           fullscreenButton: false, infoBox: false, selectionIndicator: false,
-          terrain: Cesium.Terrain.fromWorldTerrain(),
+          baseLayer: Cesium.ImageryLayer.fromProviderAsync(Promise.resolve(osmProvider), {}),
         }) as unknown as CesiumViewer;
 
         viewerRef.current = viewer;
         if (viewer.cesiumWidget?.creditContainer) {
           viewer.cesiumWidget.creditContainer.style.display = "none";
         }
+
+        // Try to load Cesium World Terrain if Ion token works (fail gracefully)
+        if (CESIUM_ION_TOKEN) {
+          try {
+            const terrain = await Cesium.createWorldTerrainAsync();
+            (viewer.scene as unknown as { terrainProvider: unknown }).terrainProvider = terrain;
+          } catch {
+            // Ion unreachable — keep ellipsoid (no high-res terrain, but globe still renders)
+          }
+        }
+
         viewer.scene.globe.enableLighting = true;
         viewer.scene.globe.depthTestAgainstTerrain = true;
         viewer.scene.skyAtmosphere.show = true;
