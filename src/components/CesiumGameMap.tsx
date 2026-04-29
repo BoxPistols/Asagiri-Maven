@@ -118,6 +118,7 @@ export default function CesiumGameMap({
   const [loading, setLoading] = useState(true);
   const [loadedCities, setLoadedCities] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const [viewerReady, setViewerReady] = useState(false);
   const [lighting, setLighting] = useState<"day" | "night" | "auto">("auto");
   const [terrainExag, setTerrainExag] = useState<number>(1);
   const [sceneOpen, setSceneOpen] = useState(false);
@@ -186,6 +187,7 @@ export default function CesiumGameMap({
         }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
 
         setLoading(false);
+        setViewerReady(true);
 
         // Load PLATEAU tilesets
         for (const city of PLATEAU_CITIES) {
@@ -295,7 +297,7 @@ export default function CesiumGameMap({
       lastBillboardImageRef.current.delete(id);
       lastPositionRef.current.delete(id);
     }
-  }, [playerUnits, enemyUnits, selectedUnitId, actedUnitIds]);
+  }, [playerUnits, enemyUnits, selectedUnitId, actedUnitIds, viewerReady]);
 
   // Attack trajectory arcs — add ballistic curves for combat events
   useEffect(() => {
@@ -367,7 +369,7 @@ export default function CesiumGameMap({
       for (const t of timers) clearTimeout(t);
       for (const id of addedIds) viewer.entities.removeById(id);
     };
-  }, [attackTrajectories]);
+  }, [attackTrajectories, viewerReady]);
 
   // Apply lighting mode
   useEffect(() => {
@@ -394,14 +396,14 @@ export default function CesiumGameMap({
       globe.enableLighting = true;
       if (clock) clock.shouldAnimate = false;
     }
-  }, [lighting]);
+  }, [lighting, viewerReady]);
 
   // Apply terrain exaggeration
   useEffect(() => {
     const viewer = viewerRef.current;
     if (!viewer) return;
     viewer.scene.globe.terrainExaggeration = terrainExag;
-  }, [terrainExag]);
+  }, [terrainExag, viewerReady]);
 
   // Fly to focus target
   useEffect(() => {
@@ -418,7 +420,7 @@ export default function CesiumGameMap({
       },
       duration: 1.2,
     });
-  }, [focusTarget]);
+  }, [focusTarget, viewerReady]);
 
   // Camera preset nav
   const flyToPreset = useCallback((preset: CameraPreset) => {
